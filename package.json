@@ -1,0 +1,32 @@
+{
+  "name": "travel-booking",
+  "version": "1.0.0",
+  "description": "Website đặt tour du lịch",
+  "main": "index.js",
+  "scripts": {
+    "start": "node backend/server.js",
+    "dev": "nodemon backend/server.js"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.933.0",
+    "axios": "^1.13.1",
+    "bcryptjs": "^2.4.3",
+    "cloudinary": "^2.8.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.21.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^7.8.7",
+    "multer": "^2.0.2",
+    "nodemailer": "^7.0.10",
+    "pannellum": "^2.5.6",
+    "qrcode": "^1.5.4",
+    "streamifier": "^0.1.1"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC"
+}

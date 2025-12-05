@@ -1,0 +1,147 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Travel Booking API",
+    "version": "1.0.0",
+    "description": "Swagger UI documentation for Travel Booking API."
+  },
+  "servers": [
+    { "url": "/api/v1" }
+  ],
+  "paths": {
+    "/auth/signup": {
+      "post": {
+        "summary": "Register",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": { "type": "string" },
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string", "format": "password" }
+                },
+                "required": ["name", "email", "password"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": { "description": "Created" },
+          "400": { "description": "Validation error" }
+        }
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "summary": "Login",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": { "type": "string", "format": "email" },
+                  "password": { "type": "string", "format": "password" }
+                },
+                "required": ["email", "password"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "OK" },
+          "401": { "description": "Unauthorized" }
+        }
+      }
+    },
+    "/tours": {
+      "get": {
+        "summary": "Get all tours",
+        "responses": {
+          "200": { "description": "OK" }
+        }
+      },
+      "post": {
+        "summary": "Create tour (admin)",
+        "security": [{ "bearerAuth": [] }],
+        "responses": {
+          "201": { "description": "Created" },
+          "403": { "description": "Forbidden" }
+        }
+      }
+    },
+    "/tours/{id}": {
+      "get": {
+        "summary": "Get tour",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" }, "404": { "description": "Not found" } }
+      }
+    },
+    "/reviews/tour/{tourId}": {
+      "get": {
+        "summary": "Reviews by tour",
+        "parameters": [
+          { "name": "tourId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/reviews": {
+      "post": {
+        "summary": "Create review (auth, image360)",
+        "security": [{ "bearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "rating": { "type": "integer" },
+                  "review": { "type": "string" },
+                  "image360": { "type": "string", "format": "binary" }
+                },
+                "required": ["rating", "review"]
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Created" }, "401": { "description": "Unauthorized" } }
+      }
+    },
+    "/reviews/{reviewId}": {
+      "patch": {
+        "summary": "Update review (auth)",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "reviewId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "200": { "description": "OK" }, "401": { "description": "Unauthorized" } }
+      },
+      "delete": {
+        "summary": "Delete review (auth)",
+        "security": [{ "bearerAuth": [] }],
+        "parameters": [
+          { "name": "reviewId", "in": "path", "required": true, "schema": { "type": "string" } }
+        ],
+        "responses": { "204": { "description": "Deleted" }, "401": { "description": "Unauthorized" } }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  }
+}
+
