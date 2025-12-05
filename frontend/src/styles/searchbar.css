@@ -1,0 +1,242 @@
+/* SearchBar Hero Variant (Home Page) */
+.search-bar-hero {
+  margin-top: 2rem;
+  background: rgba(255, 255, 255, 0.98);
+  border-radius: 12px;
+  padding: 2rem;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  backdrop-filter: blur(10px);
+}
+
+.search-form-hero {
+  width: 100%;
+}
+
+.search-row {
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 1fr 1.2fr;
+  gap: 1rem;
+  align-items: end;
+}
+
+.search-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.search-field label {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #374151;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.search-field .icon {
+  font-size: 1.1rem;
+}
+
+.search-field input,
+.search-field select {
+  padding: 0.875rem 1rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: all 0.2s;
+  background: white;
+}
+
+.search-field input:focus,
+.search-field select:focus {
+  outline: none;
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1);
+}
+
+.search-field-small {
+  max-width: 120px;
+}
+
+.btn-search-hero {
+  padding: 0.875rem 2rem;
+  background: linear-gradient(135deg, #1a73e8 0%, #0b5bd3 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  box-shadow: 0 4px 12px rgba(26, 115, 232, 0.3);
+  white-space: nowrap;
+}
+
+.btn-search-hero:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(26, 115, 232, 0.4);
+}
+
+.btn-search-hero:active {
+  transform: translateY(0);
+}
+
+/* Advanced Filters Toggle */
+.advanced-toggle {
+  margin-top: 1rem;
+  text-align: center;
+}
+
+.btn-toggle-advanced {
+  background: none;
+  border: none;
+  color: #1a73e8;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.btn-toggle-advanced:hover {
+  background: #eef2ff;
+}
+
+.advanced-filters {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+/* SearchBar Compact Variant (Tours Page) */
+.search-bar-compact {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  margin-bottom: 1.5rem;
+}
+
+.search-form-compact {
+  width: 100%;
+}
+
+.search-row-compact {
+  display: grid;
+  grid-template-columns: 2fr 1.5fr 1fr auto auto;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.search-field-compact input {
+  padding: 0.75rem 1rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  width: 100%;
+  transition: all 0.2s;
+}
+
+.search-field-compact input:focus {
+  outline: none;
+  border-color: #1a73e8;
+  box-shadow: 0 0 0 3px rgba(26, 115, 232, 0.1);
+}
+
+.btn-search-compact {
+  padding: 0.75rem 1.5rem;
+  background: #1a73e8;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-search-compact:hover {
+  background: #0b5bd3;
+}
+
+.btn-reset {
+  padding: 0.75rem 1.5rem;
+  background: white;
+  color: #6b7280;
+  border: 2px solid #e5e7eb;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-reset:hover {
+  border-color: #d1d5db;
+  background: #f9fafb;
+}
+
+/* Responsive Design */
+@media (max-width: 1024px) {
+  .search-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+  }
+
+  .search-field-small {
+    max-width: none;
+  }
+
+  .btn-search-hero {
+    grid-column: 1 / -1;
+  }
+
+  .advanced-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .search-bar-hero {
+    padding: 1.5rem;
+  }
+
+  .search-row {
+    grid-template-columns: 1fr;
+  }
+
+  .advanced-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .search-row-compact {
+    grid-template-columns: 1fr;
+  }
+
+  .btn-search-compact,
+  .btn-reset {
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .search-bar-hero {
+    padding: 1rem;
+  }
+
+  .search-field label {
+    font-size: 0.8rem;
+  }
+
+  .search-field input,
+  .search-field select {
+    padding: 0.75rem;
+    font-size: 0.9rem;
+  }
+}
+

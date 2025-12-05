@@ -1,0 +1,521 @@
+/* Review Form Styles */
+.review-form-container {
+  background: #f9f9f9;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 20px;
+  margin: 20px 0;
+}
+
+.review-form-container h3 {
+  margin-top: 0;
+  color: #333;
+  font-size: 18px;
+  margin-bottom: 15px;
+}
+
+.login-prompt {
+  text-align: center;
+  color: #666;
+  margin: 0;
+}
+
+.login-prompt a {
+  color: #007bff;
+  text-decoration: none;
+  font-weight: bold;
+}
+
+.login-prompt a:hover {
+  text-decoration: underline;
+}
+
+.review-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.form-group label {
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+}
+
+.rating-input {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.star-btn {
+  background: none;
+  border: none;
+  font-size: 28px;
+  color: #ddd;
+  cursor: pointer;
+  padding: 0;
+  transition: color 0.2s;
+}
+
+.star-btn:hover,
+.star-btn.active {
+  color: #ffc107;
+}
+
+.rating-value {
+  font-weight: 600;
+  color: #666;
+  margin-left: 10px;
+}
+
+.review-form textarea {
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-family: inherit;
+  font-size: 14px;
+  resize: vertical;
+}
+
+.review-form textarea:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+}
+
+.review-form small {
+  color: #999;
+  font-size: 12px;
+}
+
+.error-message {
+  background-color: #f8d7da;
+  color: #721c24;
+  padding: 10px 12px;
+  border-radius: 4px;
+  border: 1px solid #f5c6cb;
+  font-size: 14px;
+}
+
+.success-message {
+  background-color: #d4edda;
+  color: #155724;
+  padding: 10px 12px;
+  border-radius: 4px;
+  border: 1px solid #c3e6cb;
+  font-size: 14px;
+}
+
+.submit-btn {
+  padding: 10px 20px;
+  background-color: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.submit-btn:hover:not(:disabled) {
+  background-color: #0056b3;
+}
+
+.submit-btn:disabled {
+  background-color: #ccc;
+  cursor: not-allowed;
+}
+
+/* Review List Styles */
+.reviews-list-container {
+  margin: 30px 0;
+}
+
+.reviews-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 15px;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.reviews-header h3 {
+  margin: 0;
+  color: #333;
+  font-size: 18px;
+}
+
+.average-rating {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rating-score {
+  font-size: 24px;
+  font-weight: bold;
+  color: #333;
+}
+
+.review-count {
+  color: #999;
+  font-size: 14px;
+}
+
+.reviews-loading {
+  text-align: center;
+  padding: 20px;
+  color: #666;
+}
+
+.no-reviews {
+  text-align: center;
+  padding: 30px;
+  background: #f9f9f9;
+  border-radius: 8px;
+  color: #666;
+}
+
+.reviews-list {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.review-item {
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 15px;
+  transition: box-shadow 0.3s;
+}
+
+.review-item:hover {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+
+.reviewer-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.reviewer-name {
+  font-weight: 600;
+  color: #333;
+  font-size: 14px;
+}
+
+.review-date {
+  color: #999;
+  font-size: 12px;
+}
+
+.review-rating {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rating-number {
+  font-weight: 600;
+  color: #666;
+  font-size: 14px;
+}
+
+.review-text {
+  color: #555;
+  line-height: 1.6;
+  margin: 10px 0;
+  font-size: 14px;
+}
+
+.review-actions {
+  margin-top: 8px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.edit-btn {
+  background-color: #ffc107;
+  color: #212529;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+  margin-right: 8px;
+}
+
+.edit-btn:hover {
+  background-color: #e0a800;
+}
+
+.delete-btn {
+  background-color: #dc3545;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background-color 0.3s;
+}
+
+.delete-btn:hover {
+  background-color: #c82333;
+}
+
+.star-rating {
+  display: flex;
+  gap: 2px;
+}
+
+.filled-star {
+  color: #ffc107;
+}
+
+/* Ảnh 360 trong đánh giá */
+.review-image360 {
+  margin-top: 10px;
+}
+
+.review-image360 p {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: #666;
+}
+
+.review-image360-img {
+  width: 140px;
+  height: 90px;
+  object-fit: cover; /* cắt ảnh cho vừa khung thumbnail */
+  border-radius: 8px;
+  display: block;
+}
+
+.review-image360-img-removed {
+  opacity: 0.3;
+  filter: grayscale(100%);
+}
+
+.review-image360-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.review-image360-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.review-image360-more-btn {
+  border: 1px dashed #007bff;
+  background: rgba(0, 123, 255, 0.05);
+  color: #007bff;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  align-self: center;
+}
+
+.review-image360-more-btn:hover {
+  background: rgba(0, 123, 255, 0.12);
+}
+
+.review-image360-remove {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: #666;
+}
+
+.review-image360-thumbnail {
+  position: relative;
+  border: none;
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+  display: inline-block;
+}
+
+.review-360-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0.3),
+    rgba(0, 0, 0, 0.55)
+  );
+  color: #fff;
+  border-radius: 8px;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+}
+
+.review-image360-thumbnail:hover .review-360-overlay {
+  opacity: 1;
+}
+
+.review-360-icon {
+  font-size: 24px;
+  font-weight: 700;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+
+.review-360-subtext {
+  margin-top: 6px;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
+/* Modal xem 360° */
+.review-360-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1050;
+}
+
+.review-360-modal {
+  background: #ffffff;
+  border-radius: 10px;
+  width: 96%;
+  max-width: 1200px;
+  max-height: 94vh;
+  padding: 16px 20px 20px;
+  position: relative;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  display: flex;
+  flex-direction: column;
+}
+
+.review-360-close-btn {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  border: none;
+  background: transparent;
+  font-size: 20px;
+  cursor: pointer;
+  color: #666;
+}
+
+.review-360-close-btn:hover {
+  color: #000;
+}
+
+.review-360-modal-title {
+  margin: 0 0 10px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+}
+
+.review-360-viewer {
+  flex: 1;
+  min-height: 520px;
+  max-height: 85vh;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.review-360-modal-controls {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.review-360-nav-btn {
+  border: none;
+  background-color: #007bff;
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.review-360-nav-btn:hover {
+  background-color: #0056b3;
+}
+
+.review-edit-form {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.review-edit-rating span {
+  font-size: 13px;
+  color: #555;
+  margin-right: 8px;
+}
+
+.review-edit-textarea {
+  width: 100%;
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid #ddd;
+  font-size: 14px;
+  resize: vertical;
+}
+
+.review-edit-textarea:focus {
+  outline: none;
+  border-color: #007bff;
+  box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.2);
+}
+
+.review-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.review-edit-images {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.review-edit-images input[type='file'] {
+  margin-top: 2px;
+}
+

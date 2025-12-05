@@ -1,0 +1,213 @@
+/* Calendar Container */
+.calendar-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+/* Custom Calendar Styles */
+.tour-booking-calendar {
+  width: 100%;
+  max-width: 100%;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 1rem;
+  background: #fff;
+  font-family: inherit;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Calendar Navigation */
+.tour-booking-calendar .react-calendar__navigation {
+  display: flex;
+  height: 44px;
+  margin-bottom: 1em;
+}
+
+.tour-booking-calendar .react-calendar__navigation button {
+  min-width: 44px;
+  background: none;
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.tour-booking-calendar .react-calendar__navigation button:hover {
+  background: #f0f0f0;
+  border-radius: 4px;
+}
+
+.tour-booking-calendar .react-calendar__navigation button:disabled {
+  background: #f5f5f5;
+  color: #ccc;
+  cursor: not-allowed;
+}
+
+.tour-booking-calendar .react-calendar__navigation__label {
+  font-weight: 700;
+  font-size: 18px;
+  text-transform: capitalize;
+}
+
+/* Calendar Week Days */
+.tour-booking-calendar .react-calendar__month-view__weekdays {
+  text-align: center;
+  text-transform: uppercase;
+  font-weight: 600;
+  font-size: 0.75em;
+  color: #666;
+  margin-bottom: 0.5rem;
+}
+
+.tour-booking-calendar .react-calendar__month-view__weekdays__weekday {
+  padding: 0.5em;
+}
+
+.tour-booking-calendar .react-calendar__month-view__weekdays__weekday abbr {
+  text-decoration: none;
+}
+
+/* Calendar Days */
+.tour-booking-calendar .react-calendar__tile {
+  max-width: 100%;
+  padding: 0.75em 0.5em;
+  background: none;
+  text-align: center;
+  line-height: 16px;
+  font-size: 0.833em;
+  border-radius: 4px;
+  transition: all 0.2s;
+  position: relative;
+}
+
+/* Available dates - sáng lên, có thể click */
+.tour-booking-calendar .react-calendar__tile--available {
+  background: #e8f5e9;
+  color: #2e7d32;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tour-booking-calendar .react-calendar__tile--available:hover {
+  background: #4caf50;
+  color: #fff;
+  transform: scale(1.05);
+}
+
+.tour-booking-calendar .react-calendar__tile--available:active {
+  background: #2e7d32;
+  color: #fff;
+}
+
+/* Selected date */
+.tour-booking-calendar .react-calendar__tile--active {
+  background: #2196f3 !important;
+  color: #fff !important;
+  font-weight: 700;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #2196f3;
+}
+
+.tour-booking-calendar .react-calendar__tile--active:hover {
+  background: #1976d2 !important;
+}
+
+/* Unavailable dates - mờ đi, không thể click */
+.tour-booking-calendar .react-calendar__tile--unavailable {
+  background: #f5f5f5;
+  color: #ccc;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.tour-booking-calendar .react-calendar__tile--unavailable:hover {
+  background: #f5f5f5;
+  color: #ccc;
+  transform: none;
+}
+
+/* Disabled dates (past dates) */
+.tour-booking-calendar .react-calendar__tile--disabled {
+  background: #fafafa;
+  color: #d0d0d0;
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.tour-booking-calendar .react-calendar__tile--neighboringMonth {
+  color: #d0d0d0;
+  opacity: 0.5;
+}
+
+/* Selected date info */
+.selected-date-info {
+  padding: 0.75rem 1rem;
+  background: #e3f2fd;
+  border: 1px solid #2196f3;
+  border-radius: 6px;
+  margin-top: 0.5rem;
+}
+
+.selected-date-info p {
+  margin: 0;
+  color: #1976d2;
+  font-size: 0.95rem;
+}
+
+/* Calendar Legend */
+.calendar-legend {
+  display: flex;
+  gap: 1.5rem;
+  padding: 0.75rem;
+  background: #f9f9f9;
+  border-radius: 6px;
+  flex-wrap: wrap;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: #666;
+}
+
+.legend-available {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  background: #4caf50;
+  border-radius: 4px;
+  border: 1px solid #2e7d32;
+}
+
+.legend-unavailable {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  background: #f5f5f5;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  opacity: 0.5;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .tour-booking-calendar {
+    padding: 0.5rem;
+  }
+
+  .tour-booking-calendar .react-calendar__tile {
+    padding: 0.5em 0.25em;
+    font-size: 0.75em;
+  }
+
+  .calendar-legend {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}
+
