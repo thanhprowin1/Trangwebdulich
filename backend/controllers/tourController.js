@@ -161,6 +161,14 @@ exports.getTour = async (req, res) => {
 
 exports.updateTour = async (req, res) => {
     try {
+        // Debug: Log dữ liệu nhận được
+        console.log('Updating tour:', req.params.id);
+        console.log('Received data:', {
+            mapCenter: req.body.mapCenter,
+            hotspots: req.body.hotspots,
+            hotspotsCount: req.body.hotspots?.length || 0
+        });
+        
         // Lấy tour cũ để so sánh giá
         const oldTour = await Tour.findById(req.params.id);
         if (!oldTour) {
@@ -174,6 +182,13 @@ exports.updateTour = async (req, res) => {
         const tour = await Tour.findByIdAndUpdate(req.params.id, req.body, {
             new: true,
             runValidators: true
+        });
+        
+        // Debug: Log dữ liệu sau khi cập nhật
+        console.log('Tour updated:', {
+            mapCenter: tour.mapCenter,
+            hotspots: tour.hotspots,
+            hotspotsCount: tour.hotspots?.length || 0
         });
 
         if (!tour) {

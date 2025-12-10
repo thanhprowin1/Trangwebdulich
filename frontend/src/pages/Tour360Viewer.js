@@ -1,383 +1,322 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useParams, useHistory, Link } from 'react-router-dom';
 import axios from 'axios';
 import { API_URL } from '../config';
+import MapWithHotspots from '../components/MapWithHotspots';
 
 const Tour360Viewer = () => {
   const { id } = useParams();
   const history = useHistory();
   const [tour, setTour] = useState(null);
-  const [isLoading360, setIsLoading360] = useState(true);
-  const [pannellumViewer, setPannellumViewer] = useState(null);
   const [errorMessage, setErrorMessage] = useState('');
-  const [isVRMode, setIsVRMode] = useState(false);
-  const [vrVideoUrl, setVrVideoUrl] = useState(null);
-  const [xrSession, setXrSession] = useState(null);
-  const [viewerReloadToken, setViewerReloadToken] = useState(0);
-  const vrAnimationFrameRef = useRef(null);
-  const youtubePlayerRef = useRef(null);
+  const [loading, setLoading] = useState(true);
+  const [selectedHotspot, setSelectedHotspot] = useState(null);
+  const [selectedHotspotIndex, setSelectedHotspotIndex] = useState(null);
+  const [show360Modal, setShow360Modal] = useState(false);
+  const [activeImage360Url, setActiveImage360Url] = useState(null);
+  const [currentSceneId, setCurrentSceneId] = useState(null);
+  const modalPannellumRef = useRef(null);
 
-  // Hàm extract YouTube video ID từ URL
-  const extractYouTubeVideoId = (url) => {
-    if (!url) return null;
-    
-    // Hỗ trợ các format:
-    // https://www.youtube.com/watch?v=VIDEO_ID
-    // https://youtu.be/VIDEO_ID
-    // https://www.youtube.com/embed/VIDEO_ID
-    // https://m.youtube.com/watch?v=VIDEO_ID
-    
-    const patterns = [
-      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([^&\n?#]+)/,
-      /^([a-zA-Z0-9_-]{11})$/ // Direct video ID
-    ];
-    
-    for (const pattern of patterns) {
-      const match = url.match(pattern);
-      if (match && match[1]) {
-        return match[1];
-      }
-    }
-    
-    return null;
+  // Helper function để kiểm tra mapCenter hợp lệ
+  const hasValidMapCenter = (mapCenter) => {
+    return mapCenter && 
+           mapCenter.lat !== null && 
+           mapCenter.lat !== undefined &&
+           mapCenter.lng !== null && 
+           mapCenter.lng !== undefined &&
+           !isNaN(mapCenter.lat) &&
+           !isNaN(mapCenter.lng);
   };
 
   useEffect(() => {
     const fetchTour = async () => {
       try {
+        setLoading(true);
         setErrorMessage('');
         const response = await axios.get(`${API_URL}/tours/${id}`);
         const fetchedTour = response.data?.data?.tour;
+        
         if (!fetchedTour) {
           setErrorMessage('Không tìm thấy tour bạn yêu cầu.');
+          setLoading(false);
           return;
         }
-        if (!fetchedTour.image360Url && !fetchedTour.video360Url) {
-          setErrorMessage('Tour này chưa có ảnh 360° hoặc video 360°.');
+        
+        // Kiểm tra tour có bản đồ và hotspot không
+        if (!hasValidMapCenter(fetchedTour.mapCenter) || 
+            !fetchedTour.hotspots || 
+            fetchedTour.hotspots.length === 0) {
+          setErrorMessage('Tour này chưa có bản đồ hoặc hotspot. Vui lòng thêm bản đồ và hotspot trong Admin Dashboard.');
         }
         
         setTour(fetchedTour);
       } catch (error) {
-        console.error('Error fetching tour 360:', error);
+        console.error('Error fetching tour:', error);
         setErrorMessage('Có lỗi xảy ra khi tải dữ liệu tour. Vui lòng thử lại.');
+      } finally {
+        setLoading(false);
       }
     };
 
     fetchTour();
   }, [id]);
 
+  // Tạo sceneId chuẩn để load qua lại giữa các ảnh
+  const buildSceneId = (hotspotIndex, imageIndex) => `hotspot-${hotspotIndex}-scene-${imageIndex}`;
+
+  const parseSceneId = (sceneId) => {
+    const match = /^hotspot-(\d+)-scene-(\d+)$/.exec(sceneId || '');
+    if (!match) return { hotspotIndex: null, sceneIndex: null };
+    return { hotspotIndex: Number(match[1]), sceneIndex: Number(match[2]) };
+  };
+
+  // Lấy danh sách ảnh 360° cho một hotspot (ưu tiên mảng, sau đó đơn lẻ, sau cùng fallback tour)
+  const getHotspotImages = (hotspot) => {
+    if (!hotspot) return [];
+    if (hotspot.image360Urls && hotspot.image360Urls.length > 0) return hotspot.image360Urls;
+    if (hotspot.image360Url) return [hotspot.image360Url];
+    return tour?.image360Url ? [tour.image360Url] : [];
+  };
+
+  // Xây dựng cấu hình scenes cho Pannellum với các liên kết (mũi tên) giữa ảnh
+  const buildScenesFromTour = (tourData) => {
+    if (!tourData?.hotspots) return {};
+    const scenes = {};
+
+    tourData.hotspots.forEach((hotspot, hIndex) => {
+      const images = getHotspotImages(hotspot);
+      if (!images || images.length === 0) {
+        return;
+      }
+
+      images.forEach((imageUrl, imgIndex) => {
+        const sceneId = buildSceneId(hIndex, imgIndex);
+        const hotSpots = [];
+
+        // Tạo mũi tên scene-link dựa trên links đã cấu hình (có thể áp dụng cho tất cả ảnh hoặc chỉ ảnh cụ thể)
+        if (hotspot.links && Array.isArray(hotspot.links)) {
+          hotspot.links.forEach((link) => {
+            // Nếu link chỉ áp dụng cho 1 ảnh cụ thể, bỏ qua ảnh khác
+            if (link.fromSceneIndex !== null && link.fromSceneIndex !== undefined && link.fromSceneIndex !== imgIndex) {
+              return;
+            }
+
+            const targetHotspotIndex = typeof link.toHotspotIndex === 'number' ? link.toHotspotIndex : hIndex;
+            const targetHotspot = tourData.hotspots[targetHotspotIndex];
+            const targetImages = getHotspotImages(targetHotspot);
+
+            if (targetHotspot && targetImages.length > 0) {
+              const targetImageIndex = Math.min(
+                typeof link.toSceneIndex === 'number' ? link.toSceneIndex : 0,
+                targetImages.length - 1
+              );
+              const targetSceneId = buildSceneId(targetHotspotIndex, targetImageIndex);
+
+              // Nếu text là chuỗi rỗng, để Pannellum tự xử lý (không hiển thị nhãn)
+              // Chỉ fallback khi text là undefined/null (dữ liệu cũ)
+              const hotspotText = link.text !== undefined && link.text !== null 
+                ? link.text 
+                : (targetHotspot?.name || 'Đi tiếp');
+              
+              hotSpots.push({
+                pitch: typeof link.pitch === 'number' ? link.pitch : 0,
+                yaw: typeof link.yaw === 'number' ? link.yaw : 0,
+                type: 'scene',
+                text: hotspotText,
+                sceneId: targetSceneId
+              });
+            }
+          });
+        }
+
+        scenes[sceneId] = {
+          title: `${hotspot.name || 'Hotspot'}${images.length > 1 ? ` (#${imgIndex + 1})` : ''}`,
+          type: 'equirectangular',
+          panorama: imageUrl,
+          autoLoad: true,
+          hotSpots
+        };
+      });
+    });
+
+    return scenes;
+  };
+
+  const sceneMap = useMemo(() => (tour ? buildScenesFromTour(tour) : {}), [tour]);
+  const hasScenes = Object.keys(sceneMap).length > 0;
+
+  // Xử lý khi click vào hotspot
+  const handleHotspotClick = (hotspot, index) => {
+    setSelectedHotspot(hotspot);
+    setSelectedHotspotIndex(index);
+    const images = getHotspotImages(hotspot);
+    const firstHotspotImg = images[0] || hotspot.image360Url || tour?.image360Url || null;
+    setActiveImage360Url(firstHotspotImg);
+    setCurrentSceneId(buildSceneId(index, 0));
+    
+    // Nếu hotspot có ảnh hoặc video 360°, hiển thị modal
+    if (images.length > 0 || hotspot.video360Url || tour?.image360Url || tour?.video360Url) {
+      setShow360Modal(true);
+    }
+  };
+
+  const handleClose360Modal = () => {
+    // Destroy pannellum viewer khi đóng modal
+    if (modalPannellumRef.current && window.pannellum) {
+      try {
+        modalPannellumRef.current.destroy();
+      } catch (e) {
+        console.warn('Error destroying modal pannellum:', e);
+      }
+      modalPannellumRef.current = null;
+    }
+    setShow360Modal(false);
+    setSelectedHotspot(null);
+    setSelectedHotspotIndex(null);
+    setActiveImage360Url(null);
+    setCurrentSceneId(null);
+  };
+
+  // Khởi tạo pannellum viewer với multi-scene và hotspot điều hướng
   useEffect(() => {
-    if (!tour || !tour.image360Url || !window.pannellum) {
-      setIsLoading360(false);
-      return undefined;
+    if (!show360Modal || !window.pannellum || !hasScenes) {
+      return;
     }
 
-    setIsLoading360(true);
+    const container = document.getElementById('modal-panorama-viewer');
+    if (!container) return;
+    container.innerHTML = '';
 
-    let loadTimeout;
-    let isLoaded = false;
+    const initialSceneFromHotspot = selectedHotspotIndex !== null ? buildSceneId(selectedHotspotIndex, 0) : null;
+    const sceneIds = Object.keys(sceneMap);
+    const initialScene = (currentSceneId && sceneMap[currentSceneId])
+      ? currentSceneId
+      : (initialSceneFromHotspot && sceneMap[initialSceneFromHotspot])
+        ? initialSceneFromHotspot
+        : sceneIds[0];
+
+    if (!initialScene) return;
 
     const timer = setTimeout(() => {
       try {
-        const container = document.getElementById('panorama360-viewer');
-        if (container) {
-          container.innerHTML = '';
-        }
-
-        const handleLoad = () => {
-          if (!isLoaded) {
-            isLoaded = true;
-            setIsLoading360(false);
-            if (loadTimeout) clearTimeout(loadTimeout);
-          }
-        };
-
-        const viewer = window.pannellum.viewer('panorama360-viewer', {
-          type: 'equirectangular',
-          panorama: tour.image360Url,
+        const viewer = window.pannellum.viewer('modal-panorama-viewer', {
+          default: {
+            firstScene: initialScene,
           autoLoad: true,
-          autoRotate: 0,
+            autoRotate: 0
+          },
           showControls: true,
           showFullscreenCtrl: true,
           showZoomCtrl: true,
+          mouseZoom: true,
+          keyboardZoom: false,
+          orientationOnByDefault: false,
+          minPitch: -85,
+          maxPitch: 85,
           hfov: 100,
           minHfov: 50,
           maxHfov: 120,
-          compass: true,
           northOffset: 0,
-          onLoad: handleLoad,
-          onError: (error) => {
-            console.error('Pannellum error:', error);
-            if (!isLoaded) {
-              isLoaded = true;
-              setIsLoading360(false);
-            }
-            if (loadTimeout) clearTimeout(loadTimeout);
-            setErrorMessage('Không thể tải ảnh 360°. Vui lòng thử lại sau.');
-          }
+          scenes: sceneMap
         });
 
-        setPannellumViewer(viewer);
+        if (viewer && typeof viewer.on === 'function') {
+          viewer.on('scenechange', (sceneId) => {
+            setCurrentSceneId(sceneId);
+            const { hotspotIndex } = parseSceneId(sceneId);
+            if (hotspotIndex !== null && tour?.hotspots?.[hotspotIndex]) {
+              setSelectedHotspot(tour.hotspots[hotspotIndex]);
+              setSelectedHotspotIndex(hotspotIndex);
+            }
+        });
+        }
 
-        // Fallback timeout: nếu onLoad không được gọi sau 3 giây, tự động tắt loading
-        loadTimeout = setTimeout(() => {
-          if (!isLoaded) {
-            console.warn('Pannellum onLoad timeout, hiding loading indicator');
-            isLoaded = true;
-            setIsLoading360(false);
-          }
-        }, 3000);
-
+        modalPannellumRef.current = viewer;
+        setCurrentSceneId(initialScene);
       } catch (error) {
-        console.error('Error initializing Pannellum:', error);
-        setIsLoading360(false);
-        setErrorMessage('Không thể khởi tạo trình xem 360°.');
+        console.error('Error initializing modal pannellum:', error);
       }
     }, 100);
 
     return () => {
       clearTimeout(timer);
-      if (loadTimeout) clearTimeout(loadTimeout);
-      if (pannellumViewer && window.pannellum) {
+      if (modalPannellumRef.current && window.pannellum) {
         try {
-          pannellumViewer.destroy();
+          modalPannellumRef.current.destroy();
         } catch (e) {
-          // ignore cleanup errors
+          console.warn('Error destroying modal pannellum on cleanup:', e);
         }
+        modalPannellumRef.current = null;
       }
     };
-  }, [tour?.image360Url, viewerReloadToken]);
+  }, [show360Modal, sceneMap, selectedHotspotIndex, hasScenes, currentSceneId, tour]);
 
   const handleBack = () => {
     history.push('/tours-360');
   };
 
-  const handleReload360 = () => {
-    if (!tour?.image360Url) return;
-    setErrorMessage('');
-    setIsLoading360(true);
-    setViewerReloadToken((prev) => prev + 1);
+  // Lấy URL 360° để hiển thị (ưu tiên hotspot, sau đó tour)
+  const get360ImageUrl = () => {
+    if (activeImage360Url) return activeImage360Url;
+    if (selectedHotspot?.image360Urls && selectedHotspot.image360Urls.length > 0) return selectedHotspot.image360Urls[0];
+    if (selectedHotspot?.image360Url) return selectedHotspot.image360Url;
+    if (tour?.image360Url) return tour.image360Url;
+    return null;
   };
 
-  const handleEnterVR = async () => {
-    try {
-      const videoUrl = tour?.video360Url;
-      
-      if (!videoUrl) {
-        alert('Tour này chưa có video 360°. Vui lòng thêm link YouTube video 360° vào tour.');
-        return;
-      }
-
-      // Kiểm tra xem có phải YouTube link không
-      const youtubeVideoId = extractYouTubeVideoId(videoUrl);
-      
-      if (youtubeVideoId) {
-        // Dùng YouTube IFrame API
-        showYouTubeVRMode(youtubeVideoId);
-      } else {
-        // Fallback: dùng video URL trực tiếp (nếu không phải YouTube)
-        alert('Chỉ hỗ trợ link YouTube. Vui lòng nhập link YouTube video 360° hợp lệ.');
-        return;
-      }
-      
-    } catch (error) {
-      console.error('Error entering VR mode:', error);
-      alert('Không thể bật chế độ VR. Vui lòng thử lại.');
-    }
+  const get360VideoUrl = () => {
+    if (selectedHotspot?.video360Url) return selectedHotspot.video360Url;
+    if (tour?.video360Url) return tour.video360Url;
+    return null;
   };
 
-  const showYouTubeVRMode = (videoId) => {
-    // Ẩn panorama viewer
-    const panoramaContainer = document.getElementById('panorama360-viewer');
-    if (panoramaContainer) {
-      panoramaContainer.style.display = 'none';
-    }
-
-    // Tạo container cho YouTube VR mode (fullscreen)
-    const vrContainer = document.createElement('div');
-    vrContainer.id = 'vr-video-container';
-    vrContainer.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background: #000;
-      z-index: 10000;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-    `;
-
-    // Tạo div cho YouTube player
-    const playerDiv = document.createElement('div');
-    playerDiv.id = 'youtube-vr-player';
-    playerDiv.style.cssText = `
-      width: 100%;
-      height: 100%;
-      position: relative;
-    `;
-
-    // Nút điều khiển
-    const controls = document.createElement('div');
-    controls.style.cssText = `
-      position: absolute;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      display: flex;
-      gap: 10px;
-      z-index: 10002;
-    `;
-
-    const closeBtn = document.createElement('button');
-    closeBtn.textContent = '✕ Thoát VR';
-    closeBtn.style.cssText = `
-      padding: 12px 24px;
-      background: rgba(211, 47, 47, 0.9);
-      color: white;
-      border: 2px solid white;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 16px;
-      font-weight: 600;
-      transition: all 0.3s ease;
-    `;
-    closeBtn.onmouseover = () => {
-      closeBtn.style.background = 'rgba(211, 47, 47, 1)';
-      closeBtn.style.transform = 'scale(1.05)';
-    };
-    closeBtn.onmouseout = () => {
-      closeBtn.style.background = 'rgba(211, 47, 47, 0.9)';
-      closeBtn.style.transform = 'scale(1)';
-    };
-    closeBtn.onclick = () => {
-      exitVRMode();
-    };
-
-    controls.appendChild(closeBtn);
-    vrContainer.appendChild(playerDiv);
-    vrContainer.appendChild(controls);
-    document.body.appendChild(vrContainer);
-
-    // Khởi tạo YouTube player với VR mode
-    const initYouTubePlayer = () => {
-      if (window.YT && window.YT.Player) {
-        const player = new window.YT.Player('youtube-vr-player', {
-          videoId: videoId,
-          playerVars: {
-            autoplay: 1,
-            controls: 1,
-            rel: 0,
-            modestbranding: 1,
-            iv_load_policy: 3,
-            // VR mode parameters
-            enablejsapi: 1,
-            playsinline: 1
-          },
-          events: {
-            onReady: (event) => {
-              event.target.playVideo();
-              setIsVRMode(true);
-            },
-            onError: (event) => {
-              console.error('YouTube player error:', event.data);
-              alert('Không thể phát video YouTube. Vui lòng kiểm tra lại link.');
-              exitVRMode();
-            }
-          }
-        });
-        youtubePlayerRef.current = player;
-      } else {
-        // Nếu YouTube API chưa load, đợi một chút rồi thử lại
-        setTimeout(initYouTubePlayer, 100);
-      }
-    };
-
-    // Đợi YouTube IFrame API load
-    if (window.YT && window.YT.Player) {
-      initYouTubePlayer();
-    } else {
-      // Nếu chưa có, đợi callback
-      window.onYouTubeIframeAPIReady = () => {
-        initYouTubePlayer();
-      };
-      // Hoặc thử lại sau 1 giây
-      setTimeout(() => {
-        if (window.YT && window.YT.Player) {
-          initYouTubePlayer();
-        } else {
-          alert('Không thể tải YouTube Player. Vui lòng kiểm tra kết nối mạng.');
-          exitVRMode();
-        }
-      }, 1000);
-    }
-
-    setIsVRMode(true);
-    setVrVideoUrl(tour?.video360Url);
-  };
-
-  const exitVRMode = () => {
-    // Cancel animation frame
-    if (vrAnimationFrameRef.current) {
-      cancelAnimationFrame(vrAnimationFrameRef.current);
-      vrAnimationFrameRef.current = null;
-    }
-    
-    // Destroy YouTube player
-    if (youtubePlayerRef.current) {
+  const handleSceneSelect = (sceneId) => {
+    setCurrentSceneId(sceneId);
+    if (modalPannellumRef.current && sceneMap[sceneId]) {
       try {
-        youtubePlayerRef.current.destroy();
+        modalPannellumRef.current.loadScene(sceneId);
       } catch (e) {
-        console.warn('Error destroying YouTube player:', e);
-      }
-      youtubePlayerRef.current = null;
-    }
-    
-    const vrContainer = document.getElementById('vr-video-container');
-    if (vrContainer) {
-      const video = document.getElementById('vr-video-player');
-      if (video) {
-        video.pause();
-        video.src = '';
-      }
-      const canvas = document.getElementById('vr-video-canvas');
-      if (canvas) {
-        const ctx = canvas.getContext('2d');
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-      }
-      if (vrContainer.parentNode) {
-        document.body.removeChild(vrContainer);
+        console.warn('Không thể load scene:', e);
       }
     }
-    
-    // Hiện lại panorama viewer
-    const panoramaContainer = document.getElementById('panorama360-viewer');
-    if (panoramaContainer) {
-      panoramaContainer.style.display = 'block';
-    }
-
-    if (pannellumViewer) {
-      try {
-        pannellumViewer.destroy();
-      } catch (e) {
-        console.warn('Error destroying Pannellum viewer on VR exit:', e);
-      }
-      setPannellumViewer(null);
-    }
-    setIsLoading360(true);
-    setViewerReloadToken((prev) => prev + 1);
-
-    setIsVRMode(false);
-    setVrVideoUrl(null);
-    
-    // End XR session nếu có
-    if (xrSession) {
-      xrSession.end();
-      setXrSession(null);
+    const { hotspotIndex, sceneIndex } = parseSceneId(sceneId);
+    if (hotspotIndex !== null && tour?.hotspots?.[hotspotIndex]) {
+      const hImages = getHotspotImages(tour.hotspots[hotspotIndex]);
+      setSelectedHotspot(tour.hotspots[hotspotIndex]);
+      setSelectedHotspotIndex(hotspotIndex);
+      setActiveImage360Url(hImages[sceneIndex] || null);
     }
   };
+
+  // Extract YouTube video ID
+  const extractYouTubeVideoId = (url) => {
+    if (!url) return null;
+    const patterns = [
+      /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/v\/)([^&\n?#]+)/,
+      /^([a-zA-Z0-9_-]{11})$/
+    ];
+    for (const pattern of patterns) {
+      const match = url.match(pattern);
+      if (match && match[1]) {
+        return match[1];
+    }
+    }
+    return null;
+  };
+
+  if (loading) {
+    return (
+      <div className="tour-360-viewer-page">
+        <div className="container">
+          <div className="tour-360-viewer-card">
+            <div className="empty-state">
+              <p>Đang tải thông tin tour...</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+    }
 
   return (
     <div className="tour-360-viewer-page">
@@ -403,94 +342,191 @@ const Tour360Viewer = () => {
             </div>
           )}
 
-          {tour ? (
-            <>
-              {/* Ảnh 360° */}
-              {tour.image360Url && (
+          {tour && hasValidMapCenter(tour.mapCenter) && tour.hotspots && tour.hotspots.length > 0 ? (
                 <div className="tour-360-viewer-content">
-                  {isLoading360 && (
-                    <div className="panorama-loading">
-                      <div className="loading-spinner"></div>
-                      <p>Đang tải ảnh 360°...</p>
-                    </div>
-                  )}
-                  <div
-                    id="panorama360-viewer"
-                    key={viewerReloadToken}
-                    className="panorama-viewer"
-                  ></div>
-                  {!tour.video360Url && (
-                    <div className="panorama-controls">
-                      <p className="panorama-hint">
-                        💡 Kéo chuột để xoay, cuộn để zoom.
-                      </p>
-                      <button
-                        className="btn btn-outline"
-                        onClick={handleReload360}
-                        disabled={isLoading360}
-                      >
-                        ↻ Tải lại ảnh 360°
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Nút Bật WebVR - chỉ hiện khi có video360Url */}
-              {tour.video360Url && tour.image360Url && (
-                <div className="panorama-controls" style={{ marginTop: '1.5rem' }}>
-                  <button
-                    onClick={handleEnterVR}
-                    className="btn btn-primary btn-vr"
-                    disabled={!pannellumViewer || isLoading360}
-                  >
-                    🥽 Bật WebVR (Video 360°)
-                  </button>
-                  <button
-                    onClick={handleReload360}
-                    className="btn btn-outline"
-                    disabled={isLoading360}
-                  >
-                    ↻ Tải lại ảnh 360°
-                  </button>
-                  <p className="panorama-hint">
-                    💡 Nhấn nút WebVR để xem video 360° với chế độ toàn màn hình và VR.
-                  </p>
-                </div>
-              )}
+              <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-color)' }}>
+                  🗺️ Bản đồ khu vực {tour.destination}
+                </h3>
+              </div>
               
-              {/* Nếu chỉ có video mà không có ảnh */}
-              {tour.video360Url && !tour.image360Url && (
-                <div className="tour-360-viewer-content">
-                  <div style={{ textAlign: 'center', padding: '2rem' }}>
-                    <h3 style={{ marginBottom: '1rem', fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-color)' }}>
-                      🎥 Video 360°
+              <MapWithHotspots
+                center={tour.mapCenter}
+                zoom={tour.mapZoom || 13}
+                hotspots={tour.hotspots}
+                onHotspotClick={handleHotspotClick}
+                height="600px"
+              />
+              
+              <p style={{ marginTop: '1rem', color: '#666', fontSize: '14px', textAlign: 'center' }}>
+                💡 Nhấp vào các điểm đánh dấu trên bản đồ để xem ảnh/video 360° của từng địa điểm
+              </p>
+            </div>
+          ) : tour ? (
+            <div className="empty-state">
+              <p>Tour này chưa có bản đồ hoặc hotspot. Vui lòng thêm bản đồ và hotspot trong Admin Dashboard.</p>
+                    </div>
+          ) : null}
+
+          {/* Modal hiển thị 360° khi click hotspot */}
+          {show360Modal && (
+            <div 
+              style={{
+                position: 'fixed',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: 'rgba(0, 0, 0, 0.9)',
+                zIndex: 10000,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: '2rem'
+              }}
+              onClick={handleClose360Modal}
+            >
+              <div 
+                style={{
+                  position: 'relative',
+                  width: '100%',
+                  maxWidth: '1200px',
+                  maxHeight: '90vh',
+                  backgroundColor: '#fff',
+                  borderRadius: '8px',
+                  padding: '1.5rem',
+                  overflow: 'auto'
+                }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Header với thông tin hotspot */}
+                {selectedHotspot && (
+                  <div style={{ marginBottom: '1rem', paddingBottom: '1rem', borderBottom: '1px solid #ddd' }}>
+                    <h3 style={{ marginBottom: '0.5rem', color: '#ff5722' }}>
+                      📍 {selectedHotspot.name}
                     </h3>
-                    <p style={{ marginBottom: '1.5rem', color: '#666' }}>
-                      Bấm nút bên dưới để xem video 360° với chế độ VR
-                    </p>
-                    <button
-                      onClick={handleEnterVR}
-                      className="btn btn-primary btn-vr"
-                    >
-                      🥽 Bật WebVR (Video 360°)
-                    </button>
-                  </div>
+                    {selectedHotspot.description && (
+                      <p style={{ color: '#666', fontSize: '14px' }}>
+                        {selectedHotspot.description}
+                      </p>
+                  )}
                 </div>
               )}
 
-              {/* Nếu không có cả ảnh và video */}
-              {!tour.image360Url && !tour.video360Url && !errorMessage && (
-                <div className="empty-state">
-                  <p>Tour này chưa có ảnh 360° hoặc video 360°.</p>
+                {/* Nút đóng */}
+                  <button
+                  onClick={handleClose360Modal}
+                  style={{
+                    position: 'absolute',
+                    top: '1rem',
+                    right: '1rem',
+                    background: '#ff5722',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '50%',
+                    width: '40px',
+                    height: '40px',
+                    fontSize: '20px',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    zIndex: 10001
+                  }}
+                  >
+                  ✕
+                  </button>
+
+                {/* Danh sách ảnh 360° (nếu hotspot có nhiều ảnh) */}
+                {selectedHotspot && (() => {
+                  const hotspotImages = getHotspotImages(selectedHotspot);
+                  if (!hotspotImages.length) return null;
+                  return (
+                  <div style={{ marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      {hotspotImages.map((url, idx) => {
+                        const sceneId = buildSceneId(selectedHotspotIndex ?? 0, idx);
+                        const isActive = currentSceneId === sceneId || activeImage360Url === url;
+                        return (
+                      <button
+                        key={idx}
+                        type="button"
+                            onClick={() => handleSceneSelect(sceneId)}
+                        style={{
+                          padding: '0.35rem 0.75rem',
+                          borderRadius: '6px',
+                              border: isActive ? '2px solid #ff5722' : '1px solid #ddd',
+                              background: isActive ? '#fff3e0' : '#fff',
+                          cursor: 'pointer',
+                          fontSize: '0.85rem'
+                        }}
+                      >
+                        Ảnh 360° #{idx + 1}
+                      </button>
+                        );
+                      })}
+                  </div>
+                  );
+                })()}
+
+                {/* Hiển thị ảnh 360° */}
+                {(hasScenes || get360ImageUrl()) && window.pannellum && (
+                  <div style={{ marginBottom: '1rem' }}>
+                    <style>{`
+                      /* Làm mờ mũi tên điều hướng trong Pannellum */
+                      #modal-panorama-viewer .pnlm-hotspot {
+                        opacity: 0.3 !important;
+                        transition: opacity 0.2s ease;
+                      }
+                      #modal-panorama-viewer .pnlm-hotspot:hover {
+                        opacity: 0.7 !important;
+                      }
+                    `}</style>
+                    <div
+                      id="modal-panorama-viewer"
+                      style={{ width: '100%', height: '500px', borderRadius: '8px', overflow: 'hidden' }}
+                    ></div>
+                  </div>
+                )}
+              
+                {/* Hiển thị video 360° YouTube */}
+                {get360VideoUrl() && (() => {
+                  const videoId = extractYouTubeVideoId(get360VideoUrl());
+                  if (videoId) {
+                    return (
+                      <div style={{ marginTop: '1rem' }}>
+                        <div style={{ position: 'relative', paddingBottom: '56.25%', height: 0, overflow: 'hidden' }}>
+                          <iframe
+                            style={{
+                              position: 'absolute',
+                              top: 0,
+                              left: 0,
+                              width: '100%',
+                              height: '100%'
+                            }}
+                            src={`https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`}
+                            frameBorder="0"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                          ></iframe>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
+                {/* Nếu không có ảnh/video */}
+                {!get360ImageUrl() && !get360VideoUrl() && (
+                  <div style={{ textAlign: 'center', padding: '2rem' }}>
+                    <p style={{ color: '#666' }}>
+                      Hotspot này chưa có ảnh hoặc video 360°.
+                    </p>
                 </div>
               )}
-            </>
-          ) : !errorMessage ? (
-            <div className="empty-state">
-              <p>Đang tải thông tin tour 360°...</p>
+                </div>
             </div>
-          ) : null}
+          )}
         </div>
       </div>
     </div>
@@ -498,4 +534,3 @@ const Tour360Viewer = () => {
 };
 
 export default Tour360Viewer;
-

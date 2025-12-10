@@ -16,6 +16,17 @@ const Tours360 = () => {
     totalResults: 0
   });
 
+  // Helper function để kiểm tra mapCenter hợp lệ
+  const hasValidMapCenter = (mapCenter) => {
+    return mapCenter && 
+           mapCenter.lat !== null && 
+           mapCenter.lat !== undefined &&
+           mapCenter.lng !== null && 
+           mapCenter.lng !== undefined &&
+           !isNaN(mapCenter.lat) &&
+           !isNaN(mapCenter.lng);
+  };
+
   useEffect(() => {
     fetchTours360();
   }, [location.search]);
@@ -36,15 +47,19 @@ const Tours360 = () => {
       const response = await axios.get(`${API_URL}/tours?${params.toString()}`);
       const allTours = response.data.data.tours || [];
       
-      // Filter chỉ lấy tours có image360Url
-      const toursWith360 = allTours.filter(tour => tour.image360Url && tour.image360Url.trim() !== '');
+      // Filter chỉ lấy tours đã tích hợp bản đồ (có mapCenter hợp lệ và ít nhất 1 hotspot)
+      const toursWithMap = allTours.filter(tour => {
+        const hasValidCenter = hasValidMapCenter(tour.mapCenter);
+        const hasHotspots = tour.hotspots && Array.isArray(tour.hotspots) && tour.hotspots.length > 0;
+        return hasValidCenter && hasHotspots;
+      });
       
       // Phân trang ở frontend với limit = 7
       const limit = 7;
-      const totalResults = toursWith360.length;
+      const totalResults = toursWithMap.length;
       const totalPages = Math.ceil(totalResults / limit);
       const skip = (currentPage - 1) * limit;
-      const paginatedTours = toursWith360.slice(skip, skip + limit);
+      const paginatedTours = toursWithMap.slice(skip, skip + limit);
       
       setTours(paginatedTours);
       setPagination({
@@ -72,7 +87,7 @@ const Tours360 = () => {
         <div className="tours-360-header">
           <h1>Tour 360°</h1>
           <p className="tours-360-subtitle">
-            Khám phá các điểm đến tuyệt đẹp với trải nghiệm 360° độc đáo
+            Khám phá các điểm đến tuyệt đẹp với bản đồ tương tác và trải nghiệm 360°
           </p>
         </div>
 
@@ -96,10 +111,12 @@ const Tours360 = () => {
             </div>
           ) : tours.length === 0 ? (
             <div className="empty-state">
-              <div className="empty-icon">🥽</div>
+              <div className="empty-icon">🗺️</div>
               <p>😔 Chưa có tour 360° nào</p>
               <p className="empty-hint">
-                Các tour 360° sẽ được hiển thị ở đây khi admin upload ảnh 360°
+                Các tour 360° sẽ được hiển thị ở đây khi admin tích hợp bản đồ và hotspot cho tour.
+                <br />
+                <strong>Lưu ý:</strong> Tour phải có tọa độ trung tâm bản đồ và ít nhất 1 hotspot mới hiển thị ở đây.
               </p>
               <Link to="/tours" className="btn btn-primary" style={{ marginTop: '1rem' }}>
                 Xem tất cả tours

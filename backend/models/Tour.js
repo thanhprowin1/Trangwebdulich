@@ -55,7 +55,68 @@ const tourSchema = new mongoose.Schema({
     bookingsCount: {
         type: Number,
         default: 0
-    }
+    },
+    // Thông tin bản đồ và hotspot
+    mapCenter: {
+        lat: {
+            type: Number,
+            default: null
+        },
+        lng: {
+            type: Number,
+            default: null
+        }
+    },
+    mapZoom: {
+        type: Number,
+        default: 13
+    },
+    hotspots: [{
+        name: {
+            type: String,
+            required: true
+        },
+        lat: {
+            type: Number,
+            required: true
+        },
+        lng: {
+            type: Number,
+            required: true
+        },
+        image360Url: String,
+        image360Urls: [String], // hỗ trợ nhiều ảnh 360 cho mỗi hotspot
+        video360Url: String,
+        description: String,
+        // Liên kết điều hướng giữa các ảnh 360° (dùng cho kiểu Street View)
+        // Gồm danh sách mũi tên từ ảnh hiện tại sang ảnh khác (có thể cùng hoặc khác hotspot)
+        links: [{
+            fromSceneIndex: {
+                type: Number,
+                default: null // nếu null áp dụng cho tất cả ảnh của hotspot
+            },
+            toHotspotIndex: {
+                type: Number,
+                default: 0 // chỉ số hotspot đích trong mảng hotspots
+            },
+            toSceneIndex: {
+                type: Number,
+                default: 0 // chỉ số ảnh đích (image360Urls) trong hotspot đích
+            },
+            text: {
+                type: String,
+                default: 'Đi tiếp'
+            },
+            pitch: {
+                type: Number,
+                default: 0
+            },
+            yaw: {
+                type: Number,
+                default: 0
+            }
+        }]
+    }]
 });
 
 // Middleware để tính toán averageRating khi lấy tour

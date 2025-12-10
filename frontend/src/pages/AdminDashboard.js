@@ -22,7 +22,10 @@ const AdminDashboard = () => {
     startDates: [],
     images: [],
     image360Url: null,
-    video360Url: ''
+    video360Url: '',
+    mapCenter: { lat: null, lng: null },
+    mapZoom: 13,
+    hotspots: []
   });
 
   const [newStartDate, setNewStartDate] = useState('');
@@ -33,6 +36,22 @@ const AdminDashboard = () => {
   const [originalImage360Url, setOriginalImage360Url] = useState(null); // Lưu image360Url ban đầu từ database
   const [editStartDate, setEditStartDate] = useState('');
   const [editImageUrl, setEditImageUrl] = useState('');
+  
+  // State cho quản lý hotspot
+  const [newHotspot, setNewHotspot] = useState({
+    name: '',
+    lat: '',
+    lng: '',
+    image360Url: '',
+    image360Urls: [],
+    video360Url: '',
+    description: '',
+    links: []
+  });
+  const [editingHotspotIndex, setEditingHotspotIndex] = useState(null);
+  const [uploadingHotspot360, setUploadingHotspot360] = useState(false);
+  const [hotspot360Files, setHotspot360Files] = useState([]);
+  const [hotspot360Previews, setHotspot360Previews] = useState([]);
 
   // State cho upload ảnh
   const [uploadingImage, setUploadingImage] = useState(false);
@@ -64,6 +83,33 @@ const AdminDashboard = () => {
     } catch (error) {
       console.error('Error fetching tours:', error);
     }
+  };
+
+  const handleHotspot360Upload = (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+
+    const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png'];
+    const validFiles = [];
+
+    for (const file of files) {
+      if (!allowedTypes.includes(file.type)) {
+        setErrorMessage('Chỉ chấp nhận file ảnh 360 (jpeg, jpg, png)!');
+        setTimeout(() => setErrorMessage(''), 3000);
+        continue;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        setErrorMessage('Kích thước mỗi file không được vượt quá 10MB!');
+        setTimeout(() => setErrorMessage(''), 3000);
+        continue;
+      }
+      validFiles.push(file);
+    }
+
+    const newPreviews = validFiles.map((f) => URL.createObjectURL(f));
+    setHotspot360Files((prev) => [...prev, ...validFiles]);
+    setHotspot360Previews((prev) => [...prev, ...newPreviews]);
+    e.target.value = '';
   };
 
   const fetchBookings = async () => {
@@ -414,7 +460,10 @@ const AdminDashboard = () => {
         startDates: [],
         images: [],
         image360Url: null,
-        video360Url: ''
+        video360Url: '',
+        mapCenter: { lat: null, lng: null },
+        mapZoom: 13,
+        hotspots: []
       });
       setNewStartDate('');
       setNewImageUrl('');
@@ -474,12 +523,33 @@ const AdminDashboard = () => {
 
   // Hàm bắt đầu chỉnh sửa tour
   const handleEditTour = (tour) => {
+    // Reset trạng thái hotspot tạm trước khi nạp tour mới
+    setNewHotspot({
+      name: '',
+      lat: '',
+      lng: '',
+      image360Url: '',
+      image360Urls: [],
+      video360Url: '',
+      description: '',
+      links: []
+    });
+    setHotspot360Files([]);
+    setHotspot360Previews([]);
+    setEditingHotspotIndex(null);
+
     setEditingTour({
       ...tour,
       startDates: tour.startDates || [],
       images: tour.images || [],
       image360Url: tour.image360Url || null,
-      video360Url: tour.video360Url || ''
+      video360Url: tour.video360Url || '',
+      mapCenter: tour.mapCenter || { lat: null, lng: null },
+      mapZoom: tour.mapZoom || 13,
+      hotspots: (tour.hotspots || []).map((h) => ({
+        ...h,
+        links: h.links || []
+      }))
     });
     // Lưu image360Url ban đầu từ database để so sánh sau này
     setOriginalImage360Url(tour.image360Url || null);
@@ -497,6 +567,20 @@ const AdminDashboard = () => {
     setEditImageUrl('');
     setPendingDeleteImage360(false);
     setImage360UrlToDelete(null);
+    // Reset form hotspot và file pending
+    setNewHotspot({
+      name: '',
+      lat: '',
+      lng: '',
+      image360Url: '',
+      image360Urls: [],
+      video360Url: '',
+      description: '',
+      links: []
+    });
+    setHotspot360Files([]);
+    setHotspot360Previews([]);
+    setEditingHotspotIndex(null);
   };
 
   // Hàm thay đổi thông tin tour đang chỉnh sửa
@@ -556,12 +640,304 @@ const AdminDashboard = () => {
     });
   };
 
+  // ============ HOTSPOT MANAGEMENT FUNCTIONS ============
+  
+  const handleAddHotspot = async () => {
+    if (!newHotspot.name || !newHotspot.lat || !newHotspot.lng) {
+      setErrorMessage('Vui lòng nhập đầy đủ tên và tọa độ (lat, lng) cho hotspot!');
+      setTimeout(() => setErrorMessage(''), 3000);
+      return;
+    }
+
+    const uploadHotspot360Files = async () => {
+      if (hotspot360Files.length === 0) return [];
+      try {
+        setUploadingHotspot360(true);
+        const token = localStorage.getItem('token');
+        const uploadedUrls = [];
+        for (const file of hotspot360Files) {
+          const formData = new FormData();
+          formData.append('image360', file);
+          const response = await axios.post(`${API_URL}/upload/image360`, formData, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'multipart/form-data'
+            }
+          });
+          uploadedUrls.push(response.data.data.image360Url);
+        }
+        return uploadedUrls;
+      } catch (error) {
+        setErrorMessage(error.response?.data?.message || 'Có lỗi xảy ra khi upload ảnh 360° cho hotspot!');
+        setTimeout(() => setErrorMessage(''), 3000);
+        return null;
+      } finally {
+        setUploadingHotspot360(false);
+      }
+    };
+
+    const uploadedUrls = await uploadHotspot360Files();
+    if (uploadedUrls === null) return; // upload lỗi
+
+    const combinedImages = [...(newHotspot.image360Urls || []), ...uploadedUrls];
+    const hotspot = {
+      name: newHotspot.name,
+      lat: parseFloat(newHotspot.lat),
+      lng: parseFloat(newHotspot.lng),
+      image360Url: combinedImages[0] || newHotspot.image360Url || null,
+      image360Urls: combinedImages,
+      video360Url: newHotspot.video360Url || null,
+      description: newHotspot.description || null,
+      links: (newHotspot.links || []).map((link) => ({
+        fromSceneIndex: link.fromSceneIndex === '' ? null : (Number.isFinite(parseInt(link.fromSceneIndex)) ? parseInt(link.fromSceneIndex) : null),
+        toHotspotIndex: Number.isFinite(parseInt(link.toHotspotIndex)) ? parseInt(link.toHotspotIndex) : 0,
+        toSceneIndex: Number.isFinite(parseInt(link.toSceneIndex)) ? parseInt(link.toSceneIndex) : 0,
+        yaw: Number.isFinite(parseFloat(link.yaw)) ? parseFloat(link.yaw) : 0,
+        pitch: (() => {
+          const pitchValue = parseFloat(link.pitch);
+          // Nếu pitch = 0 hoặc không hợp lệ, dùng -25 để nghiêng xuống mặt đất
+          return Number.isFinite(pitchValue) && pitchValue !== 0 ? pitchValue : -25;
+        })(),
+        text: link.text || ''
+      }))
+    };
+
+    if (editingTour) {
+      setEditingTour({
+        ...editingTour,
+        hotspots: [...editingTour.hotspots, hotspot]
+      });
+    } else {
+      setNewTour({
+        ...newTour,
+        hotspots: [...newTour.hotspots, hotspot]
+      });
+    }
+
+    // Reset form hotspot sau khi thêm
+    setNewHotspot({
+      name: '',
+      lat: '',
+      lng: '',
+      image360Url: '',
+      image360Urls: [],
+      video360Url: '',
+      description: '',
+      links: []
+    });
+    setHotspot360Files([]);
+    setHotspot360Previews([]);
+  };
+
+  const handleEditHotspot = (index) => {
+    const hotspots = editingTour ? editingTour.hotspots : newTour.hotspots;
+    const hotspot = hotspots[index];
+    // Reset pending files when editing a specific hotspot
+    setHotspot360Files([]);
+    setHotspot360Previews([]);
+    setNewHotspot({
+      name: hotspot.name || '',
+      lat: hotspot.lat || '',
+      lng: hotspot.lng || '',
+      image360Url: hotspot.image360Url || '',
+      image360Urls: hotspot.image360Urls || [],
+      video360Url: hotspot.video360Url || '',
+      description: hotspot.description || '',
+      links: (hotspot.links || []).map(link => ({
+        ...link,
+        // Nếu pitch = 0 hoặc không có, đặt mặc định -25 để nghiêng xuống
+        pitch: (link.pitch === 0 || link.pitch === undefined || link.pitch === null) ? -25 : link.pitch
+      }))
+    });
+    setEditingHotspotIndex(index);
+  };
+
+  const handleUpdateHotspot = async () => {
+    if (!newHotspot.name || !newHotspot.lat || !newHotspot.lng) {
+      setErrorMessage('Vui lòng nhập đầy đủ tên và tọa độ (lat, lng) cho hotspot!');
+      setTimeout(() => setErrorMessage(''), 3000);
+      return;
+    }
+
+    const uploadHotspot360Files = async () => {
+      if (hotspot360Files.length === 0) return [];
+      try {
+        setUploadingHotspot360(true);
+        const token = localStorage.getItem('token');
+        const uploadedUrls = [];
+        for (const file of hotspot360Files) {
+          const formData = new FormData();
+          formData.append('image360', file);
+          const response = await axios.post(`${API_URL}/upload/image360`, formData, {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'multipart/form-data'
+            }
+          });
+          uploadedUrls.push(response.data.data.image360Url);
+        }
+        return uploadedUrls;
+      } catch (error) {
+        setErrorMessage(error.response?.data?.message || 'Có lỗi xảy ra khi upload ảnh 360° cho hotspot!');
+        setTimeout(() => setErrorMessage(''), 3000);
+        return null;
+      } finally {
+        setUploadingHotspot360(false);
+      }
+    };
+
+    const uploadedUrls = await uploadHotspot360Files();
+    if (uploadedUrls === null) return; // upload lỗi
+
+    const combinedImages = [...(newHotspot.image360Urls || []), ...uploadedUrls];
+    const hotspot = {
+      name: newHotspot.name,
+      lat: parseFloat(newHotspot.lat),
+      lng: parseFloat(newHotspot.lng),
+      image360Url: combinedImages[0] || newHotspot.image360Url || null,
+      image360Urls: combinedImages,
+      video360Url: newHotspot.video360Url || null,
+      description: newHotspot.description || null,
+      links: (newHotspot.links || []).map((link) => ({
+        fromSceneIndex: link.fromSceneIndex === '' ? null : (Number.isFinite(parseInt(link.fromSceneIndex)) ? parseInt(link.fromSceneIndex) : null),
+        toHotspotIndex: Number.isFinite(parseInt(link.toHotspotIndex)) ? parseInt(link.toHotspotIndex) : 0,
+        toSceneIndex: Number.isFinite(parseInt(link.toSceneIndex)) ? parseInt(link.toSceneIndex) : 0,
+        yaw: Number.isFinite(parseFloat(link.yaw)) ? parseFloat(link.yaw) : 0,
+        pitch: (() => {
+          const pitchValue = parseFloat(link.pitch);
+          // Nếu pitch = 0 hoặc không hợp lệ, dùng -25 để nghiêng xuống mặt đất
+          return Number.isFinite(pitchValue) && pitchValue !== 0 ? pitchValue : -25;
+        })(),
+        text: link.text || ''
+      }))
+    };
+
+    if (editingTour) {
+      const updatedHotspots = [...editingTour.hotspots];
+      updatedHotspots[editingHotspotIndex] = hotspot;
+      setEditingTour({
+        ...editingTour,
+        hotspots: updatedHotspots
+      });
+    } else {
+      const updatedHotspots = [...newTour.hotspots];
+      updatedHotspots[editingHotspotIndex] = hotspot;
+      setNewTour({
+        ...newTour,
+        hotspots: updatedHotspots
+      });
+    }
+
+    setNewHotspot({
+      name: '',
+      lat: '',
+      lng: '',
+      image360Url: '',
+      image360Urls: [],
+      video360Url: '',
+      description: '',
+      links: []
+    });
+    setEditingHotspotIndex(null);
+    setHotspot360Files([]);
+    setHotspot360Previews([]);
+  };
+
+  const handleRemoveHotspot = (index) => {
+    if (editingTour) {
+      setEditingTour({
+        ...editingTour,
+        hotspots: editingTour.hotspots.filter((_, i) => i !== index)
+      });
+    } else {
+      setNewTour({
+        ...newTour,
+        hotspots: newTour.hotspots.filter((_, i) => i !== index)
+      });
+    }
+  };
+
+  const handleRemoveHotspot360Url = (index) => {
+    setNewHotspot((prev) => {
+      const updated = (prev.image360Urls || []).filter((_, i) => i !== index);
+      return {
+        ...prev,
+        image360Urls: updated,
+        // nếu url đang chọn là url đầu, và bị xóa, fallback về url đầu tiên còn lại hoặc rỗng
+        image360Url: updated[0] || ''
+      };
+    });
+  };
+
+  const handleRemovePendingHotspot360File = (index) => {
+    setHotspot360Files((prev) => prev.filter((_, i) => i !== index));
+    setHotspot360Previews((prev) => {
+      const newList = prev.filter((_, i) => i !== index);
+      return newList;
+    });
+  };
+
+  // Quản lý liên kết (mũi tên) giữa các ảnh 360°
+  const handleAddHotspotLink = () => {
+    setNewHotspot((prev) => ({
+      ...prev,
+      links: [
+        ...(prev.links || []),
+        { fromSceneIndex: '', toHotspotIndex: 0, toSceneIndex: 0, yaw: 0, pitch: -25, text: '' }
+      ]
+    }));
+  };
+
+  const handleUpdateHotspotLink = (index, field, value) => {
+    setNewHotspot((prev) => {
+      const links = [...(prev.links || [])];
+      const current = links[index] || {};
+      let parsedValue = value;
+      if (['fromSceneIndex', 'toHotspotIndex', 'toSceneIndex', 'yaw', 'pitch'].includes(field)) {
+        parsedValue = value === '' ? '' : Number(value);
+      }
+      links[index] = { ...current, [field]: parsedValue };
+      return { ...prev, links };
+    });
+  };
+
+  const handleRemoveHotspotLink = (index) => {
+    setNewHotspot((prev) => ({
+      ...prev,
+      links: (prev.links || []).filter((_, i) => i !== index)
+    }));
+  };
+
+  const handleCancelEditHotspot = () => {
+    setNewHotspot({
+      name: '',
+      lat: '',
+      lng: '',
+      image360Url: '',
+      image360Urls: [],
+      video360Url: '',
+      description: '',
+      links: []
+    });
+    setEditingHotspotIndex(null);
+    setHotspot360Files([]);
+    setHotspot360Previews([]);
+  };
+
   // Hàm cập nhật tour
   const handleUpdateTour = async (e) => {
     e.preventDefault();
     try {
       const token = localStorage.getItem('token');
       const tourId = editingTour._id;
+      
+      // Debug: Log dữ liệu trước khi gửi
+      console.log('Updating tour with data:', {
+        mapCenter: editingTour.mapCenter,
+        hotspots: editingTour.hotspots,
+        hotspotsCount: editingTour.hotspots?.length || 0
+      });
+      
       await axios.patch(`${API_URL}/tours/${tourId}`, editingTour, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -820,93 +1196,526 @@ const AdminDashboard = () => {
                 )}
               </div>
 
-              {/* Ảnh 360° */}
+              {/* Bản đồ và Hotspot */}
               <div className="form-group full-width">
-                <label>Ảnh 360° (Tour 360°)</label>
-                <div className="upload-360-section">
-                  <label className="upload-label">
-                    📷 Chọn ảnh 360° từ máy (sẽ upload lên Cloudinary)
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/jpg,image/png"
-                      onChange={(e) => handle360ImageUpload(e, !!editingTour)}
-                      style={{ display: 'none' }}
-                      disabled={uploading360Image}
-                    />
-                  </label>
-                  {uploading360Image && <span className="uploading-text">Đang upload ảnh 360° lên Cloudinary...</span>}
-                  {(editingTour ? editingTour.image360Url : newTour.image360Url) && (
-                    <div className="image360-preview">
-                      <p className="success-text">✓ Đã upload ảnh 360°</p>
-                      <p className="url-text">URL: {(editingTour ? editingTour.image360Url : newTour.image360Url).substring(0, 60)}...</p>
-                      {editingTour && editingTour._id ? (
-                        // Nếu image360Url hiện tại khác với ban đầu (mới upload chưa lưu), dùng endpoint không cần tourId
-                        editingTour.image360Url !== originalImage360Url ? (
-                      <button
-                        type="button"
-                            onClick={() => handleDelete360ImageOnly(editingTour.image360Url)}
-                        className="btn-remove-image"
-                      >
-                            🗑️ Xóa ảnh 360° (xóa từ Cloudinary)
-                      </button>
-                        ) : (
+                <label>🗺️ Bản đồ và Hotspot (Điểm đánh dấu trên bản đồ)</label>
+                
+                {/* Map Center */}
+                <div style={{ marginBottom: '1rem', padding: '1rem', background: '#f5f5f5', borderRadius: '6px' }}>
+                  <h4 style={{ marginBottom: '0.5rem', fontSize: '1rem' }}>Tọa độ trung tâm bản đồ</h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                    <div>
+                      <label style={{ fontSize: '0.85rem' }}>Latitude (Vĩ độ)</label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={editingTour ? (editingTour.mapCenter?.lat || '') : (newTour.mapCenter?.lat || '')}
+                        onChange={(e) => {
+                          const value = e.target.value ? parseFloat(e.target.value) : null;
+                          if (editingTour) {
+                            setEditingTour({
+                              ...editingTour,
+                              mapCenter: { ...editingTour.mapCenter, lat: value }
+                            });
+                          } else {
+                            setNewTour({
+                              ...newTour,
+                              mapCenter: { ...newTour.mapCenter, lat: value }
+                            });
+                          }
+                        }}
+                        placeholder="Ví dụ: 16.0544 (Đà Nẵng)"
+                        style={{ width: '100%', padding: '0.5rem' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.85rem' }}>Longitude (Kinh độ)</label>
+                      <input
+                        type="number"
+                        step="any"
+                        value={editingTour ? (editingTour.mapCenter?.lng || '') : (newTour.mapCenter?.lng || '')}
+                        onChange={(e) => {
+                          const value = e.target.value ? parseFloat(e.target.value) : null;
+                          if (editingTour) {
+                            setEditingTour({
+                              ...editingTour,
+                              mapCenter: { ...editingTour.mapCenter, lng: value }
+                            });
+                          } else {
+                            setNewTour({
+                              ...newTour,
+                              mapCenter: { ...newTour.mapCenter, lng: value }
+                            });
+                          }
+                        }}
+                        placeholder="Ví dụ: 108.2022 (Đà Nẵng)"
+                        style={{ width: '100%', padding: '0.5rem' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ fontSize: '0.85rem' }}>Zoom level</label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="18"
+                        value={editingTour ? (editingTour.mapZoom || 13) : (newTour.mapZoom || 13)}
+                        onChange={(e) => {
+                          const value = parseInt(e.target.value) || 13;
+                          if (editingTour) {
+                            setEditingTour({ ...editingTour, mapZoom: value });
+                          } else {
+                            setNewTour({ ...newTour, mapZoom: value });
+                          }
+                        }}
+                        style={{ width: '100%', padding: '0.5rem' }}
+                      />
+                    </div>
+                  </div>
+                  <p style={{ fontSize: '0.8rem', color: '#666', margin: 0 }}>
+                    💡 Tìm tọa độ tại: <a href="https://www.openstreetmap.org/" target="_blank" rel="noopener noreferrer">OpenStreetMap</a> hoặc <a href="https://www.google.com/maps" target="_blank" rel="noopener noreferrer">Google Maps</a>
+                  </p>
+                </div>
+
+                {/* Hotspots */}
+                <div style={{ marginTop: '1rem' }}>
+                  <h4 style={{ marginBottom: '0.5rem', fontSize: '1rem' }}>Danh sách Hotspot</h4>
+                  
+                  {/* Form thêm/sửa hotspot */}
+                  <div style={{ padding: '1rem', background: '#fff', border: '1px solid #ddd', borderRadius: '6px', marginBottom: '1rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                      <div>
+                        <label style={{ fontSize: '0.85rem' }}>Tên điểm *</label>
+                        <input
+                          type="text"
+                          value={newHotspot.name}
+                          onChange={(e) => setNewHotspot({ ...newHotspot, name: e.target.value })}
+                          placeholder="Ví dụ: Bãi biển Mỹ Khê"
+                          style={{ width: '100%', padding: '0.5rem' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.85rem' }}>Mô tả</label>
+                        <input
+                          type="text"
+                          value={newHotspot.description}
+                          onChange={(e) => setNewHotspot({ ...newHotspot, description: e.target.value })}
+                          placeholder="Mô tả ngắn về điểm này"
+                          style={{ width: '100%', padding: '0.5rem' }}
+                        />
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                      <div>
+                        <label style={{ fontSize: '0.85rem' }}>Latitude *</label>
+                        <input
+                          type="number"
+                          step="any"
+                          value={newHotspot.lat}
+                          onChange={(e) => setNewHotspot({ ...newHotspot, lat: e.target.value })}
+                          placeholder="16.0544"
+                          style={{ width: '100%', padding: '0.5rem' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.85rem' }}>Longitude *</label>
+                        <input
+                          type="number"
+                          step="any"
+                          value={newHotspot.lng}
+                          onChange={(e) => setNewHotspot({ ...newHotspot, lng: e.target.value })}
+                          placeholder="108.2022"
+                          style={{ width: '100%', padding: '0.5rem' }}
+                        />
+                      </div>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                      <div>
+                        <label style={{ fontSize: '0.85rem' }}>Ảnh 360° (upload từ máy)</label>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.35rem' }}>
+                          <label className="upload-label" style={{ cursor: 'pointer', margin: 0 }}>
+                            📷 Upload ảnh 360°
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/jpg,image/png"
+                              onChange={handleHotspot360Upload}
+                              multiple
+                              style={{ display: 'none' }}
+                              disabled={uploadingHotspot360}
+                            />
+                          </label>
+                          {uploadingHotspot360 && <span className="uploading-text">Đang upload...</span>}
+                        </div>
+
+                        {(newHotspot.image360Urls || []).length > 0 && (
+                          <div style={{ marginTop: '0.35rem', background: '#e8f5e9', padding: '0.5rem', borderRadius: '6px', border: '1px solid #c8e6c9' }}>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#2e7d32' }}>✓ Đã có {newHotspot.image360Urls.length} ảnh 360° (đã lưu)</p>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.25rem' }}>
+                              {newHotspot.image360Urls.map((url, idx) => (
+                                <div
+                                  key={`saved-${idx}`}
+                                  style={{
+                                    width: '120px',
+                                    textAlign: 'center',
+                                    background: '#fff',
+                                    border: '1px solid #c8e6c9',
+                                    borderRadius: '6px',
+                                    padding: '0.35rem',
+                                    position: 'relative'
+                                  }}
+                                >
+                                  <div
+                                    style={{
+                                      position: 'absolute',
+                                      top: '4px',
+                                      left: '4px',
+                                      background: '#1976d2',
+                                      color: '#fff',
+                                      borderRadius: '4px',
+                                      padding: '2px 6px',
+                                      fontSize: '12px',
+                                      fontWeight: 600
+                                    }}
+                                  >
+                                    #{idx + 1}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemoveHotspot360Url(idx)}
+                                    style={{
+                                      position: 'absolute',
+                                      top: '4px',
+                                      right: '4px',
+                                      border: 'none',
+                                      background: '#e53935',
+                                      color: '#fff',
+                                      borderRadius: '50%',
+                                      width: '22px',
+                                      height: '22px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      cursor: 'pointer',
+                                      fontSize: '12px'
+                                    }}
+                                    title="Xóa ảnh đã lưu"
+                                  >
+                                    ×
+                                  </button>
+                                  <div style={{ width: '100%', height: '70px', overflow: 'hidden', borderRadius: '4px', marginBottom: '0.25rem' }}>
+                                    <img
+                                      src={url}
+                                      alt={`360-${idx + 1}`}
+                                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                    />
+                                  </div>
+                                  <div style={{ fontSize: '0.8rem', color: '#555' }}>Đã lưu</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {hotspot360Previews.length > 0 && (
+                          <div style={{ marginTop: '0.35rem', background: '#fff8e1', padding: '0.5rem', borderRadius: '6px', border: '1px solid #ffe0b2' }}>
+                            <p style={{ margin: 0, fontSize: '0.85rem', color: '#f57c00' }}>Ảnh 360° mới (chưa upload - sẽ upload khi Thêm/Cập nhật hotspot)</p>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginTop: '0.25rem' }}>
+                              {hotspot360Previews.map((url, idx) => (
+                                <div
+                                  key={`pending-${idx}`}
+                                  style={{
+                                    width: '120px',
+                                    textAlign: 'center',
+                                    background: '#fff',
+                                    border: '1px solid #ffe0b2',
+                                    borderRadius: '6px',
+                                    padding: '0.35rem',
+                                    position: 'relative'
+                                  }}
+                                >
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRemovePendingHotspot360File(idx)}
+                                    style={{
+                                      position: 'absolute',
+                                      top: '4px',
+                                      right: '4px',
+                                      border: 'none',
+                                      background: '#e53935',
+                                      color: '#fff',
+                                      borderRadius: '50%',
+                                      width: '22px',
+                                      height: '22px',
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      cursor: 'pointer',
+                                      fontSize: '12px'
+                                    }}
+                                    title="Xóa ảnh mới chọn"
+                                  >
+                                    ×
+                                  </button>
+                                  <div style={{ width: '100%', height: '70px', overflow: 'hidden', borderRadius: '4px', marginBottom: '0.25rem' }}>
+                                    <img
+                                      src={url}
+                                      alt={`pending-360-${idx + 1}`}
+                                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                    />
+                                  </div>
+                                  <div style={{ fontSize: '0.8rem', color: '#f57c00' }}>Chưa upload</div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <div>
+                        <label style={{ fontSize: '0.85rem' }}>URL video 360° YouTube (tùy chọn)</label>
+                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                          <input
+                            type="url"
+                            value={newHotspot.video360Url}
+                            onChange={(e) => setNewHotspot({ ...newHotspot, video360Url: e.target.value })}
+                            placeholder="https://youtube.com/watch?v=..."
+                            style={{ flex: 1, padding: '0.5rem' }}
+                          />
+                          {newHotspot.video360Url ? (
+                            <button
+                              type="button"
+                              onClick={() => setNewHotspot({ ...newHotspot, video360Url: '' })}
+                              style={{
+                                padding: '0.45rem 0.75rem',
+                                borderRadius: '6px',
+                                border: '1px solid #e53935',
+                                background: '#e53935',
+                                color: '#fff',
+                                cursor: 'pointer',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              🗑️ Xóa URL
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled
+                              style={{
+                                padding: '0.45rem 0.75rem',
+                                borderRadius: '6px',
+                                border: '1px solid #ddd',
+                                background: '#f5f5f5',
+                                color: '#999',
+                                cursor: 'not-allowed',
+                                whiteSpace: 'nowrap'
+                              }}
+                            >
+                              Xóa URL
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Liên kết mũi tên giữa các ảnh 360° */}
+                    <div style={{ marginTop: '0.5rem', padding: '0.75rem', border: '1px dashed #ccc', borderRadius: '6px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                        <div>
+                          <label style={{ fontSize: '0.95rem', fontWeight: 600 }}>Liên kết mũi tên (Street View)</label>
+                          <p style={{ margin: 0, fontSize: '0.8rem', color: '#666' }}>
+                            Chỉ số hotspot/ảnh bắt đầu từ 0. Yaw: hướng ngang (0-360°). Pitch: hướng dọc (âm = nghiêng xuống, dương = nghiêng lên). Mặc định pitch = -25° để mũi tên nghiêng xuống mặt đất.
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleAddHotspotLink}
+                          className="btn-add"
+                          style={{ padding: '0.35rem 0.75rem' }}
+                        >
+                          ➕ Thêm mũi tên
+                        </button>
+                      </div>
+
+                      {(newHotspot.links || []).length === 0 && (
+                        <div style={{ fontSize: '0.85rem', color: '#888', background: '#f7f7f7', padding: '0.5rem', borderRadius: '6px' }}>
+                          Chưa có liên kết. Thêm mũi tên để chuyển cảnh giữa các ảnh 360°.
+                        </div>
+                      )}
+
+                      {(newHotspot.links || []).map((link, idx) => (
+                        <div
+                          key={idx}
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(6, 1fr) auto',
+                            gap: '0.35rem',
+                            alignItems: 'center',
+                            padding: '0.35rem 0',
+                            borderBottom: '1px dashed #eee'
+                          }}
+                        >
+                          <div>
+                            <label style={{ fontSize: '0.8rem' }}>From Scene</label>
+                            <input
+                              type="number"
+                              value={link.fromSceneIndex === null || link.fromSceneIndex === undefined ? '' : link.fromSceneIndex}
+                              onChange={(e) => handleUpdateHotspotLink(idx, 'fromSceneIndex', e.target.value)}
+                              style={{ width: '100%', padding: '0.4rem' }}
+                              min="0"
+                              placeholder="(trống = mọi ảnh)"
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: '0.8rem' }}>To Hotspot</label>
+                            <input
+                              type="number"
+                              value={link.toHotspotIndex ?? 0}
+                              onChange={(e) => handleUpdateHotspotLink(idx, 'toHotspotIndex', e.target.value)}
+                              style={{ width: '100%', padding: '0.4rem' }}
+                              min="0"
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: '0.8rem' }}>To Scene</label>
+                            <input
+                              type="number"
+                              value={link.toSceneIndex ?? 0}
+                              onChange={(e) => handleUpdateHotspotLink(idx, 'toSceneIndex', e.target.value)}
+                              style={{ width: '100%', padding: '0.4rem' }}
+                              min="0"
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: '0.8rem' }}>Yaw (°)</label>
+                            <input
+                              type="number"
+                              step="any"
+                              value={link.yaw ?? 0}
+                              onChange={(e) => handleUpdateHotspotLink(idx, 'yaw', e.target.value)}
+                              style={{ width: '100%', padding: '0.4rem' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: '0.8rem' }}>Pitch (°)</label>
+                            <input
+                              type="number"
+                              step="any"
+                              value={link.pitch !== undefined && link.pitch !== null ? link.pitch : -25}
+                              onChange={(e) => handleUpdateHotspotLink(idx, 'pitch', e.target.value)}
+                              placeholder="-25 (nghiêng xuống)"
+                              style={{ width: '100%', padding: '0.4rem' }}
+                            />
+                          </div>
+                          <div>
+                            <label style={{ fontSize: '0.8rem' }}>Nhãn</label>
+                            <input
+                              type="text"
+                              value={link.text || ''}
+                              onChange={(e) => handleUpdateHotspotLink(idx, 'text', e.target.value)}
+                              placeholder="Đi tiếp"
+                              style={{ width: '100%', padding: '0.4rem' }}
+                            />
+                          </div>
                           <button
                             type="button"
-                            onClick={() => handleDelete360Image(editingTour._id, editingTour.image360Url, true)}
-                            className="btn-remove-image"
+                            onClick={() => handleRemoveHotspotLink(idx)}
+                            className="btn-delete"
+                            style={{ padding: '0.45rem 0.6rem', justifySelf: 'center' }}
                           >
-                            🗑️ Xóa ảnh 360° (xóa vĩnh viễn)
+                            🗑️
                           </button>
-                        )
+                        </div>
+                      ))}
+                    </div>
+
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      {editingHotspotIndex !== null ? (
+                        <>
+                          <button
+                            type="button"
+                            onClick={handleUpdateHotspot}
+                            className="btn-add"
+                            style={{ flex: 1 }}
+                          >
+                            ✓ Cập nhật Hotspot
+                          </button>
+                          <button
+                            type="button"
+                            onClick={handleCancelEditHotspot}
+                            className="btn-outline"
+                            style={{ flex: 1 }}
+                          >
+                            Hủy
+                          </button>
+                        </>
                       ) : (
                         <button
                           type="button"
-                          onClick={() => handleDelete360ImageOnly((editingTour ? editingTour.image360Url : newTour.image360Url))}
-                          className="btn-remove-image"
+                          onClick={handleAddHotspot}
+                          className="btn-add"
+                          style={{ width: '100%' }}
                         >
-                          🗑️ Xóa ảnh 360° (xóa từ Cloudinary)
+                          ➕ Thêm Hotspot
                         </button>
                       )}
                     </div>
+                  </div>
+
+                  {/* Danh sách hotspots */}
+                  {(editingTour ? editingTour.hotspots : newTour.hotspots).length > 0 && (
+                    <div style={{ marginTop: '1rem' }}>
+                      {(editingTour ? editingTour.hotspots : newTour.hotspots).map((hotspot, index) => (
+                        <div key={index} style={{ 
+                          padding: '0.75rem', 
+                          background: '#f9f9f9', 
+                          border: '1px solid #ddd', 
+                          borderRadius: '6px',
+                          marginBottom: '0.5rem',
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'center'
+                        }}>
+                          <div style={{ flex: 1 }}>
+                            <strong>📍 {hotspot.name}</strong>
+                            {hotspot.description && <p style={{ margin: '0.25rem 0', fontSize: '0.85rem', color: '#666' }}>{hotspot.description}</p>}
+                            <p style={{ margin: '0.25rem 0', fontSize: '0.8rem', color: '#888' }}>
+                              Tọa độ: {hotspot.lat}, {hotspot.lng}
+                              {(() => {
+                                const imagesCount = hotspot.image360Urls?.length || (hotspot.image360Url ? 1 : 0);
+                                return imagesCount > 0 ? ` | 📷 ${imagesCount} ảnh 360°` : '';
+                              })()}
+                              {hotspot.video360Url && ' | 🎥 Có video 360°'}
+                              {hotspot.links?.length ? ` | 🔗 ${hotspot.links.length} mũi tên` : ''}
+                            </p>
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button
+                              type="button"
+                              onClick={() => handleEditHotspot(index)}
+                              className="btn-edit"
+                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.85rem' }}
+                            >
+                              ✏️
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveHotspot(index)}
+                              className="btn-delete"
+                              style={{ padding: '0.25rem 0.5rem', fontSize: '0.85rem' }}
+                            >
+                              🗑️
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
                   )}
-                  <p className="upload-hint">💡 Ảnh 360° sẽ được lưu trên Cloudinary. Kích thước tối đa: 10MB (phù hợp với Cloudinary free plan). Sau khi upload xong có thể xem lại ở trang Tour 360°.</p>
+                  
+                  <p className="upload-hint" style={{ marginTop: '0.5rem' }}>
+                    💡 Hotspot là các điểm đánh dấu trên bản đồ. Khi người dùng click vào hotspot, họ sẽ xem được ảnh/video 360° của điểm đó.
+                    <br />Nếu hotspot không có ảnh/video 360° riêng, sẽ dùng ảnh/video 360° của tour.
+                  </p>
                 </div>
               </div>
 
-              {/* Video 360° (YouTube) */}
-              <div className="form-group full-width">
-                <label>Video 360° (YouTube Link)</label>
-                <input
-                  type="url"
-                  name="video360Url"
-                  value={editingTour ? editingTour.video360Url : newTour.video360Url}
-                  onChange={editingTour ? handleEditTourChange : handleNewTourChange}
-                  placeholder="Nhập link YouTube video 360° (ví dụ: https://www.youtube.com/watch?v=VIDEO_ID)"
-                  style={{ width: '100%', padding: '0.75rem', borderRadius: '6px', border: '1px solid #ddd' }}
-                />
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-                  <button
-                    type="button"
-                    className="btn-clear-video"
-                    onClick={() => handleClearVideo360Link(!!editingTour)}
-                    disabled={!(editingTour ? editingTour.video360Url : newTour.video360Url)}
-                  >
-                    🗑️ Xóa link video 360°
-                  </button>
-                </div>
-                <p className="upload-hint" style={{ marginTop: '0.5rem' }}>
-                  💡 Nhập link YouTube video 360°. Video sẽ được nhúng (embed) trực tiếp vào trang Tour 360°. 
-                  <br />Ví dụ: https://www.youtube.com/watch?v=dQw4w9WgXcQ hoặc https://youtu.be/dQw4w9WgXcQ
-                </p>
-                {(editingTour ? editingTour.video360Url : newTour.video360Url) && (
-                  <div style={{ marginTop: '0.5rem', padding: '0.75rem', background: '#e3f2fd', borderRadius: '6px', border: '1px solid #2196F3' }}>
-                    <p style={{ margin: 0, color: '#1976D2', fontWeight: 600 }}>✓ Đã nhập link YouTube</p>
-                    <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.85rem', color: '#555', wordBreak: 'break-all' }}>
-                      {(editingTour ? editingTour.video360Url : newTour.video360Url)}
-                    </p>
-                  </div>
-                )}
-              </div>
 
               {/* Hình ảnh */}
               <div className="form-group full-width">
