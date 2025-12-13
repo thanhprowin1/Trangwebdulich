@@ -10,6 +10,7 @@ const bookingRoutes = require('./routes/bookingRoutes');
 const reviewRoutes = require('./routes/reviewRoutes');
 const uploadRoutes = require('./routes/uploadRoutes');
 const userRoutes = require('./routes/userRoutes');
+const extensionRoutes = require('./routes/extensionRoutes');
 
 dotenv.config({ path: path.join(__dirname, 'config.env') });
 
@@ -38,6 +39,7 @@ app.use('/api/v1/bookings', bookingRoutes);
 app.use('/api/v1/reviews', reviewRoutes);
 app.use('/api/v1/upload', uploadRoutes);
 app.use('/api/v1/users', userRoutes);
+app.use('/api/v1/extensions', extensionRoutes);
 
 // Test route
 app.get('/test', (req, res) => {

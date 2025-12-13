@@ -47,7 +47,7 @@ const Tours360 = () => {
       const response = await axios.get(`${API_URL}/tours?${params.toString()}`);
       const allTours = response.data.data.tours || [];
       
-      // Filter chỉ lấy tours đã tích hợp bản đồ (có mapCenter hợp lệ và ít nhất 1 hotspot)
+      // Filter chỉ lấy tours đã tích hợp bản đồ (mapCenter hợp lệ) và có ít nhất 1 hotspot
       const toursWithMap = allTours.filter(tour => {
         const hasValidCenter = hasValidMapCenter(tour.mapCenter);
         const hasHotspots = tour.hotspots && Array.isArray(tour.hotspots) && tour.hotspots.length > 0;

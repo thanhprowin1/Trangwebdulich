@@ -238,18 +238,40 @@ const Payment = () => {
             <span>Ngày khởi hành:</span>
             <strong>{formatDate(booking.startDate)}</strong>
           </div>
-          <div className="summary-item total" style={{ 
-            display: 'flex', 
+          <div className="summary-item total" style={{
+            display: 'flex',
             justifyContent: 'space-between',
             padding: '1rem 0',
             marginTop: '1rem',
             borderTop: '2px solid #007bff'
           }}>
             <span style={{ fontSize: '1.2rem' }}>Tổng tiền:</span>
-            <strong style={{ fontSize: '1.5rem', color: '#e74c3c' }}>
-              {booking.price.toLocaleString()} VND
-            </strong>
+            {(() => {
+              const ext = booking.extension || {};
+              const finalPrice = typeof booking.finalPrice === 'number'
+                ? booking.finalPrice
+                : (ext.extensionStatus === 'approved'
+                    ? (ext.totalPrice || (booking.price + (ext.extensionPrice || 0)))
+                    : booking.price);
+              return (
+                <strong style={{ fontSize: '1.5rem', color: '#e74c3c' }}>
+                  {finalPrice.toLocaleString()} VND
+                </strong>
+              );
+            })()}
           </div>
+
+          {booking?.extension?.extensionStatus === 'approved' && booking?.extension?.extensionPrice > 0 && (
+            <div className="summary-item" style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              padding: '0.5rem 0',
+              color: '#555'
+            }}>
+              <span>Đã gồm phụ thu mở rộng:</span>
+              <span>+{booking.extension.extensionPrice.toLocaleString()} VND</span>
+            </div>
+          )}
         </div>
 
         <div className="payment-form-section" style={{

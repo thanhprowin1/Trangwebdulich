@@ -57,17 +57,35 @@ exports.createPayment = async (req, res) => {
             });
         }
 
+        // Tính tổng tiền cuối cùng (gồm phụ thu mở rộng nếu đã được duyệt)
+        const ext = booking.extension || {};
+        const finalPrice = (ext && ext.extensionStatus === 'approved')
+            ? ((typeof ext.totalPrice === 'number' && ext.totalPrice > 0)
+                ? ext.totalPrice
+                : (booking.price + (ext.extensionPrice || 0)))
+            : booking.price;
+
+        // Tính số ngày cuối cùng (bao gồm ngày mở rộng nếu đã duyệt)
+        const baseDuration = booking.tour ? booking.tour.duration : 0;
+        const finalDuration = (ext && ext.extensionStatus === 'approved' && ext.additionalDays > 0)
+            ? baseDuration + ext.additionalDays
+            : baseDuration;
+
         // Trả về thông tin thanh toán
         res.status(200).json({
             status: 'success',
             data: {
                 booking: {
                     _id: booking._id,
-                    price: booking.price,
+                    price: booking.price, // giá gốc
+                    finalPrice,          // giá cuối cùng để hiển thị
+                    extension: ext,      // gửi cả thông tin mở rộng cho FE
                     tour: booking.tour ? {
                         _id: booking.tour._id,
                         name: booking.tour.name,
-                        destination: booking.tour.destination
+                        destination: booking.tour.destination,
+                        baseDuration: booking.tour.duration,
+                        finalDuration: finalDuration
                     } : null,
                     numberOfPeople: booking.numberOfPeople,
                     startDate: booking.startDate
@@ -121,9 +139,16 @@ exports.handleMoMoReturn = async (req, res) => {
             return res.redirect(`${failedUrl}?message=${encodeURIComponent('Không tìm thấy đơn đặt tour')}`);
         }
 
-        // Kiểm tra số tiền
-        if (parseInt(amount) !== booking.price) {
-            const failedUrl = process.env.FRONTEND_PAYMENT_FAILED_URL || 
+        // Kiểm tra số tiền theo giá cuối cùng (bao gồm phụ thu đã duyệt nếu có)
+        const ext = booking.extension || {};
+        const finalAmount = (ext && ext.extensionStatus === 'approved')
+            ? ((typeof ext.totalPrice === 'number' && ext.totalPrice > 0)
+                ? ext.totalPrice
+                : (booking.price + (ext.extensionPrice || 0)))
+            : booking.price;
+        const finalAmountInt = Math.round(finalAmount);
+        if (parseInt(amount) !== finalAmountInt) {
+            const failedUrl = process.env.FRONTEND_PAYMENT_FAILED_URL ||
                              `${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment/failed`;
             return res.redirect(`${failedUrl}?message=${encodeURIComponent('Số tiền không khớp')}`);
         }
@@ -183,8 +208,15 @@ exports.handleVNPayReturn = async (req, res) => {
             return res.redirect(`${failedUrl}?message=${encodeURIComponent('Không tìm thấy đơn đặt tour')}`);
         }
 
-        if (amount !== booking.price) {
-            const failedUrl = process.env.FRONTEND_PAYMENT_FAILED_URL || 
+        // So khớp theo giá cuối cùng (bao gồm phụ thu đã được duyệt nếu có)
+        const extVN = booking.extension || {};
+        const finalAmountVN = (extVN && extVN.extensionStatus === 'approved')
+            ? ((typeof extVN.totalPrice === 'number' && extVN.totalPrice > 0)
+                ? extVN.totalPrice
+                : (booking.price + (extVN.extensionPrice || 0)))
+            : booking.price;
+        if (amount !== finalAmountVN) {
+            const failedUrl = process.env.FRONTEND_PAYMENT_FAILED_URL ||
                              `${process.env.FRONTEND_URL || 'http://localhost:3000'}/payment/failed`;
             return res.redirect(`${failedUrl}?message=${encodeURIComponent('Số tiền không khớp')}`);
         }
@@ -320,9 +352,17 @@ exports.createMoMoPayment = async (req, res) => {
                          `http://localhost:5001/api/v1/bookings/payment/momo-notify`;
 
         // Tạo payment request với MoMo
+        // Tính số tiền thanh toán cuối cùng (bao gồm phụ thu mở rộng nếu đã duyệt)
+        const extForPay = booking.extension || {};
+        const finalAmountForPay = (extForPay && extForPay.extensionStatus === 'approved')
+            ? ((typeof extForPay.totalPrice === 'number' && extForPay.totalPrice > 0)
+                ? extForPay.totalPrice
+                : (booking.price + (extForPay.extensionPrice || 0)))
+            : booking.price;
+
         const paymentResult = await momo.createPayment({
             orderId: booking._id.toString(),
-            amount: booking.price,
+            amount: finalAmountForPay,
             orderInfo: orderInfo,
             returnUrl: returnUrl,
             notifyUrl: notifyUrl

@@ -31,9 +31,13 @@ router.get('/payment/:id/status', paymentController.getPaymentStatus); // Kiểm
 router.get('/stats/revenue', authController.restrictTo('admin'), bookingController.getRevenueStats);
 router.get('/stats/popular', authController.restrictTo('admin'), bookingController.getPopularTours);
 
-router.get('/my-bookings', bookingController.getMyBookings);
-router.post('/', bookingController.createBooking);
+// User routes - KHÔNG cho phép admin
+router.get('/my-bookings', authController.restrictTo('user'), bookingController.getMyBookings);
+router.post('/', authController.restrictTo('user'), bookingController.createBooking);
+
+// Admin routes
 router.get('/', authController.restrictTo('admin'), bookingController.getAllBookings);
 router.patch('/:id', authController.restrictTo('admin'), bookingController.updateBookingStatus);
+router.delete('/:id', authController.restrictTo('admin'), bookingController.deleteBooking); // Soft delete
 
 module.exports = router;

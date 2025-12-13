@@ -8,6 +8,10 @@ const router = express.Router();
 router.get('/destinations', tourController.getDestinations);
 router.get('/destination/:destination', tourController.getToursByDestination);
 
+// Admin routes - MUST be before /:id routes to avoid route conflicts
+router.get('/admin/deleted', authController.protect, authController.restrictTo('admin'), tourController.getDeletedTours);
+router.patch('/:id/restore', authController.protect, authController.restrictTo('admin'), tourController.restoreTour);
+
 router
     .route('/')
     .get(tourController.getAllTours)

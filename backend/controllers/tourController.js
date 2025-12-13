@@ -1,4 +1,5 @@
 const Tour = require('../models/Tour');
+const { excludeDeleted, excludeDeletedFromFilter } = require('../utils/softDeleteHelper');
 
 exports.createTour = async (req, res) => {
     try {
@@ -31,7 +32,7 @@ exports.getAllTours = async (req, res) => {
         const basicFilter = JSON.parse(queryStr);
 
         // Text search: name, destination, description via `search` query param
-        let mongoFilter = { ...basicFilter };
+        let mongoFilter = excludeDeletedFromFilter(basicFilter);
         if (req.query.search) {
             const regex = new RegExp(req.query.search, 'i');
             mongoFilter = {
@@ -132,7 +133,7 @@ exports.getTour = async (req, res) => {
     try {
         const { id } = req.params;
         console.log('Fetching tour detail for id:', id);
-        let tour = await Tour.findById(id);
+        let tour = await excludeDeleted(Tour.findById(id));
         if (!tour) {
             return res.status(404).json({
                 status: 'fail',
@@ -238,10 +239,31 @@ exports.updateTour = async (req, res) => {
 
 exports.deleteTour = async (req, res) => {
     try {
-        await Tour.findByIdAndDelete(req.params.id);
-        res.status(204).json({
+        const { id } = req.params;
+
+        // Kiểm tra tour có tồn tại không (chỉ tour chưa bị xóa)
+        const tour = await Tour.findOne({ _id: id, deletedAt: null });
+        if (!tour) {
+            return res.status(404).json({
+                status: 'fail',
+                message: 'Không tìm thấy tour'
+            });
+        }
+
+        // Thực hiện soft delete - chỉ cập nhật deletedAt
+        // Sử dụng findOneAndUpdate với điều kiện deletedAt: null để đảm bảo chỉ soft delete tour chưa xóa
+        const deletedTour = await Tour.findOneAndUpdate(
+            { _id: id, deletedAt: null },
+            { deletedAt: new Date() },
+            { new: true }
+        );
+
+        res.status(200).json({
             status: 'success',
-            data: null
+            message: 'Tour đã được xóa thành công',
+            data: {
+                tour: deletedTour
+            }
         });
     } catch (err) {
         res.status(404).json({
@@ -264,9 +286,9 @@ exports.getToursByDestination = async (req, res) => {
             });
         }
 
-        const tours = await Tour.find({ 
-            destination: new RegExp(destination, 'i') 
-        })
+        const tours = await excludeDeleted(Tour.find({
+            destination: new RegExp(destination, 'i')
+        }))
         .limit(limit)
         .sort('-createdAt');
 
@@ -294,11 +316,11 @@ exports.getToursByDestination = async (req, res) => {
     }
 };
 
-// Lấy danh sách các destination có tour
+// Lấy danh sách các destination có tour (chỉ tour chưa bị xóa)
 exports.getDestinations = async (req, res) => {
     try {
-        const destinations = await Tour.distinct('destination');
-        
+        const destinations = await Tour.distinct('destination', { deletedAt: null });
+
         res.status(200).json({
             status: 'success',
             results: destinations.length,
@@ -310,6 +332,82 @@ exports.getDestinations = async (req, res) => {
         res.status(404).json({
             status: 'fail',
             message: err.message
+        });
+    }
+};
+
+// Khôi phục tour đã bị xóa (soft delete)
+exports.restoreTour = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Tìm tour đã bị xóa (bỏ qua filter soft delete bằng cách truy cập trực tiếp database)
+        const mongoose = require('mongoose');
+
+        // Validate ObjectId
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({
+                status: 'fail',
+                message: 'ID tour không hợp lệ'
+            });
+        }
+
+        const tour = await Tour.collection.findOne({
+            _id: new mongoose.Types.ObjectId(id),
+            deletedAt: { $ne: null }
+        });
+
+        if (!tour) {
+            return res.status(404).json({
+                status: 'fail',
+                message: 'Không tìm thấy tour đã bị xóa'
+            });
+        }
+
+        // Khôi phục tour - đặt deletedAt về null
+        const restoredTour = await Tour.findByIdAndUpdate(
+            id,
+            { deletedAt: null },
+            { new: true, runValidators: false }
+        );
+
+        res.status(200).json({
+            status: 'success',
+            message: 'Tour đã được khôi phục thành công',
+            data: {
+                tour: restoredTour
+            }
+        });
+    } catch (err) {
+        res.status(500).json({
+            status: 'fail',
+            message: err.message
+        });
+    }
+};
+
+// Lấy danh sách tour đã bị xóa (chỉ cho admin)
+exports.getDeletedTours = async (req, res) => {
+    try {
+        // Lấy tất cả tour có deletedAt không null
+        // Sử dụng collection để bypass middleware soft delete
+        const deletedTours = await Tour.collection
+            .find({ deletedAt: { $ne: null } })
+            .sort({ deletedAt: -1 })
+            .toArray();
+
+        res.status(200).json({
+            status: 'success',
+            results: deletedTours.length,
+            data: {
+                tours: deletedTours
+            }
+        });
+    } catch (err) {
+        console.error('Error in getDeletedTours:', err);
+        res.status(500).json({
+            status: 'fail',
+            message: err.message || 'Có lỗi xảy ra khi lấy danh sách tour đã xóa'
         });
     }
 };

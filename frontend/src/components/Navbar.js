@@ -44,7 +44,7 @@ const Navbar = () => {
           <div className={`navbar-menu ${menuOpen ? 'open' : ''}`}>
             <Link to="/tours" onClick={() => setMenuOpen(false)}>Tours</Link>
             <Link to="/tours-360" onClick={() => setMenuOpen(false)}>Tour 360°</Link>
-            {isAuthenticated && (
+            {isAuthenticated && user?.role !== 'admin' && (
               <>
                 <Link to="/my-bookings" onClick={() => setMenuOpen(false)}>
                   Đơn đặt của tôi
@@ -53,6 +53,11 @@ const Navbar = () => {
                   Tài khoản
                 </Link>
               </>
+            )}
+            {isAuthenticated && user?.role === 'admin' && (
+              <Link to="/profile" onClick={() => setMenuOpen(false)}>
+                Tài khoản
+              </Link>
             )}
             {isAuthenticated && user?.role === 'admin' && (
               <Link to="/admin" onClick={() => setMenuOpen(false)}>

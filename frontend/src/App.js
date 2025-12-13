@@ -60,6 +60,26 @@ const AdminRoute = ({ component: Component, ...rest }) => {
   );
 };
 
+// User-only Route (không cho phép admin)
+const UserRoute = ({ component: Component, ...rest }) => {
+  const { isAuthenticated, loading, user } = useAuth();
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+  return (
+    <Route
+      {...rest}
+      render={props =>
+        isAuthenticated && user?.role !== 'admin' ? (
+          <Component {...props} />
+        ) : (
+          <Redirect to="/" />
+        )
+      }
+    />
+  );
+};
+
 function App() {
   return (
     <AuthProvider>
@@ -75,7 +95,7 @@ function App() {
               <Route path="/tours/:id" component={TourDetail} />
               <Route path="/login" component={Login} />
               <Route path="/register" component={Register} />
-              <PrivateRoute path="/my-bookings" component={MyBookings} />
+              <UserRoute path="/my-bookings" component={MyBookings} />
               {/* Đặt các route cụ thể TRƯỚC route có parameter để tránh match sai */}
               <Route exact path="/payment/success" component={PaymentSuccess} />
               <Route exact path="/payment/failed" component={PaymentFailed} />

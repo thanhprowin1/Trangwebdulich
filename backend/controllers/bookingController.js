@@ -1,94 +1,114 @@
 const Booking = require('../models/Booking');
 const Tour = require('../models/Tour');
+const TourExtension = require('../models/TourExtension');
 const mongoose = require('mongoose');
 
 // Helper function để validate ObjectId
 const isValidObjectId = (id) => {
     return mongoose.Types.ObjectId.isValid(id);
 };
+// Tính giá mở rộng dựa trên số ngày và số người
+const calculateExtensionPrice = (tour, additionalDays, additionalPeople) => {
+    const pricePerDay = tour.price / tour.duration;
+    const pricePerPerson = tour.price / tour.maxGroupSize;
+
+    const extensionPrice = (pricePerDay * additionalDays) + (pricePerPerson * additionalPeople);
+
+    return {
+        pricePerDay: parseFloat(pricePerDay.toFixed(2)),
+        pricePerPerson: parseFloat(pricePerPerson.toFixed(2)),
+        extensionPrice: parseFloat(extensionPrice.toFixed(2))
+    };
+};
 
 exports.createBooking = async (req, res) => {
+    // Ghi chú: Đã loại bỏ transaction để tương thích với môi trường MongoDB standalone.
+    // Trong môi trường production, nên sử dụng replica set và kích hoạt lại transaction.
     try {
-        // Validate startDate not in the past
-        if (!req.body.startDate) {
-            return res.status(400).json({
-                status: 'fail',
-                message: 'Vui lòng chọn ngày khởi hành'
-            });
+        const {
+            tour: tourId,
+            startDate: startDateStr,
+            numberOfPeople,
+            additionalDays,
+            additionalPeople
+        } = req.body;
+
+        // 1. Validate inputs
+        if (!startDateStr) {
+            throw new Error('Vui lòng chọn ngày khởi hành');
         }
-        const startDate = new Date(req.body.startDate);
-        if (isNaN(startDate.getTime())) {
-            return res.status(400).json({
-                status: 'fail',
-                message: 'Ngày khởi hành không hợp lệ'
-            });
-        }
-        const now = new Date();
-        const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-        if (startDate < startOfToday) {
-            return res.status(400).json({
-                status: 'fail',
-                message: 'Ngày khởi hành không được ở trong quá khứ'
-            });
+        const startDate = new Date(startDateStr);
+        if (isNaN(startDate.getTime()) || startDate < new Date(new Date().setHours(0, 0, 0, 0))) {
+            throw new Error('Ngày khởi hành không hợp lệ hoặc ở trong quá khứ');
         }
 
-        // Kiểm tra số lượng người còn nhận
-        const tour = await Tour.findById(req.body.tour);
-        if (!tour) {
-            return res.status(404).json({
-                status: 'fail',
-                message: 'Không tìm thấy tour'
-            });
-        }
-
-        // Kiểm tra ngày khởi hành phải nằm trong danh sách startDates của tour
-        if (!tour.startDates || tour.startDates.length === 0) {
-            return res.status(400).json({
-                status: 'fail',
-                message: 'Tour này chưa có ngày khởi hành. Vui lòng liên hệ admin.'
-            });
-        }
-
-        // So sánh ngày (chỉ so sánh ngày, không so sánh giờ)
-        const selectedDateStr = startDate.toISOString().split('T')[0];
-        const isValidDate = tour.startDates.some(tourDate => {
-            const tourDateStr = new Date(tourDate).toISOString().split('T')[0];
-            return tourDateStr === selectedDateStr;
-        });
-
-        if (!isValidDate) {
-            const availableDates = tour.startDates
-                .map(d => new Date(d).toLocaleDateString('vi-VN'))
-                .join(', ');
-            return res.status(400).json({
-                status: 'fail',
-                message: `Ngày khởi hành không hợp lệ. Các ngày có sẵn: ${availableDates}`
-            });
-        }
-
-        const requestedPeople = parseInt(req.body.numberOfPeople, 10);
+        const requestedPeople = parseInt(numberOfPeople, 10);
         if (isNaN(requestedPeople) || requestedPeople < 1) {
-            return res.status(400).json({
-                status: 'fail',
-                message: 'Số lượng người phải lớn hơn 0'
-            });
+            throw new Error('Số lượng người phải lớn hơn 0');
         }
 
-        if (requestedPeople > tour.maxGroupSize) {
-            return res.status(400).json({
-                status: 'fail',
-                message: `Tour chỉ nhận tối đa ${tour.maxGroupSize} người`
-            });
+        const days = parseInt(additionalDays, 10) || 0;
+        const people = parseInt(additionalPeople, 10) || 0;
+        if (days < 0 || people < 0) {
+            throw new Error('Số ngày và số người mở rộng phải >= 0');
         }
 
-        // Tạo đơn đặt tour mới
-        const newBooking = await Booking.create({
-            tour: req.body.tour,
+        // 2. Fetch tour and validate capacity & dates
+        const tour = await Tour.findById(tourId);
+        if (!tour) {
+            throw new Error('Không tìm thấy tour');
+        }
+
+        // Chỉ kiểm tra giới hạn số người khi không có bất kỳ yêu cầu mở rộng nào
+        if (days === 0 && people === 0) {
+            if (requestedPeople > tour.maxGroupSize) {
+                throw new Error(`Số người không được vượt quá ${tour.maxGroupSize}`);
+            }
+        }
+
+        const selectedDateStr = startDate.toISOString().split('T')[0];
+        const isValidDate = tour.startDates.some(d => new Date(d).toISOString().split('T')[0] === selectedDateStr);
+        if (!isValidDate) {
+            throw new Error('Ngày khởi hành không có sẵn');
+        }
+
+        // 3. Create initial booking
+        const newBooking = new Booking({
+            tour: tourId,
             user: req.user.id,
             price: tour.price * requestedPeople,
             numberOfPeople: requestedPeople,
-            startDate: req.body.startDate
+            startDate: startDate
         });
+        await newBooking.save();
+
+        // 4. Handle extension if requested
+        if (days > 0 || people > 0) {
+            const pricing = calculateExtensionPrice(tour, days, people);
+
+            await TourExtension.create({
+                booking: newBooking._id,
+                tour: tourId,
+                user: req.user.id,
+                additionalDays: days,
+                additionalPeople: people,
+                pricePerDay: pricing.pricePerDay,
+                pricePerPerson: pricing.pricePerPerson,
+                extensionPrice: pricing.extensionPrice,
+                status: 'pending' // Mặc định là pending để admin duyệt
+            });
+
+            // Update booking with extension info
+            newBooking.extension = {
+                additionalDays: days,
+                additionalPeople: people,
+                extensionPrice: pricing.extensionPrice,
+                totalPrice: newBooking.price + pricing.extensionPrice,
+                extensionStatus: 'pending',
+                requestedAt: new Date()
+            };
+            await newBooking.save();
+        }
 
         res.status(201).json({
             status: 'success',
@@ -96,6 +116,7 @@ exports.createBooking = async (req, res) => {
                 booking: newBooking
             }
         });
+
     } catch (err) {
         res.status(400).json({
             status: 'fail',
@@ -113,11 +134,23 @@ exports.getMyBookings = async (req, res) => {
             })
             .sort('-createdAt');
 
+        // Bổ sung trường finalPrice để FE hiển thị giá cuối cùng
+        const bookingsWithFinal = bookings.map(b => {
+            const obj = b.toObject();
+            const ext = obj.extension || {};
+            const isApproved = ext.extensionStatus === 'approved';
+            obj.basePrice = obj.price;
+            obj.finalPrice = isApproved
+                ? (ext.totalPrice || (obj.price + (ext.extensionPrice || 0)))
+                : obj.price;
+            return obj;
+        });
+
         res.status(200).json({
             status: 'success',
-            results: bookings.length,
+            results: bookingsWithFinal.length,
             data: {
-                bookings
+                bookings: bookingsWithFinal
             }
         });
     } catch (err) {
@@ -141,11 +174,22 @@ exports.getAllBookings = async (req, res) => {
             })
             .sort('-createdAt');
 
+        const bookingsWithFinal = bookings.map(b => {
+            const obj = b.toObject();
+            const ext = obj.extension || {};
+            const isApproved = ext.extensionStatus === 'approved';
+            obj.basePrice = obj.price;
+            obj.finalPrice = isApproved
+                ? (ext.totalPrice || (obj.price + (ext.extensionPrice || 0)))
+                : obj.price;
+            return obj;
+        });
+
         res.status(200).json({
             status: 'success',
-            results: bookings.length,
+            results: bookingsWithFinal.length,
             data: {
-                bookings
+                bookings: bookingsWithFinal
             }
         });
     } catch (err) {
@@ -236,7 +280,7 @@ exports.cancelMyBooking = async (req, res) => {
             path: req.path,
             method: req.method
         });
-        
+
         // Tìm booking với điều kiện user để đảm bảo user chỉ hủy đơn của chính họ
         // Sử dụng findOne với điều kiện user để tránh vấn đề populate
         // req.user._id là ObjectId từ Mongoose document
@@ -287,26 +331,83 @@ exports.cancelMyBooking = async (req, res) => {
     }
 };
 
+// Admin: Xóa booking (soft delete - giữ lại dữ liệu cho kế toán)
+exports.deleteBooking = async (req, res) => {
+    try {
+        // Validate ObjectId
+        if (!isValidObjectId(req.params.id)) {
+            return res.status(400).json({
+                status: 'fail',
+                message: 'ID đơn đặt tour không hợp lệ'
+            });
+        }
+
+        const booking = await Booking.findById(req.params.id);
+
+        if (!booking) {
+            return res.status(404).json({
+                status: 'fail',
+                message: 'Không tìm thấy đơn đặt tour'
+            });
+        }
+
+        // Soft delete - đánh dấu là đã xóa thay vì xóa hoàn toàn
+        booking.isDeleted = true;
+        booking.deletedAt = new Date();
+        booking.deletedBy = req.user._id;
+        await booking.save();
+
+        res.status(200).json({
+            status: 'success',
+            message: 'Đơn đặt tour đã được xóa thành công',
+            data: {
+                booking
+            }
+        });
+    } catch (err) {
+        console.error('Error in deleteBooking:', err);
+        res.status(400).json({
+            status: 'fail',
+            message: err.message
+        });
+    }
+};
+
 // Revenue statistics grouped by month (and year)
-// Chỉ tính các đơn đã hoàn thành (completed)
+// Chỉ tính các đơn đã hoàn thành (completed) và chưa bị xóa
 exports.getRevenueStats = async (req, res) => {
     try {
         const year = req.query.year ? parseInt(req.query.year, 10) : undefined;
 
-        const matchStage = { status: 'completed' }; // Chỉ tính đơn đã hoàn thành
-        if (year && !isNaN(year)) {
-            matchStage.$expr = {
-                $eq: [{ $year: '$createdAt' }, year]
-            };
-        }
+        // Build match stage correctly
+        const matchStage = {
+            status: 'completed', // Chỉ tính đơn đã hoàn thành
+            isDeleted: false // Loại trừ các đơn bị xóa
+        };
 
         const pipeline = [
-            { $match: matchStage }, // Luôn filter theo status
+            { $match: matchStage },
+            {
+                $addFields: {
+                    year: { $year: '$createdAt' },
+                    month: { $month: '$createdAt' }
+                }
+            }
+        ];
+
+        // Add year filter if provided
+        if (year && !isNaN(year)) {
+            pipeline.push({
+                $match: { year: year }
+            });
+        }
+
+        pipeline.push(
             {
                 $group: {
                     _id: {
-                        year: { $year: '$createdAt' },
-                        month: { $month: '$createdAt' }
+                        year: '$year',
+                        month: '$month'
                     },
                     totalRevenue: { $sum: '$price' },
                     totalBookings: { $sum: 1 }
@@ -322,7 +423,7 @@ exports.getRevenueStats = async (req, res) => {
                     totalBookings: 1
                 }
             }
-        ];
+        );
 
         const stats = await Booking.aggregate(pipeline);
 
@@ -332,6 +433,7 @@ exports.getRevenueStats = async (req, res) => {
             data: { stats }
         });
     } catch (err) {
+        console.error('Error in getRevenueStats:', err);
         res.status(400).json({
             status: 'fail',
             message: err.message
@@ -339,18 +441,43 @@ exports.getRevenueStats = async (req, res) => {
     }
 };
 
-// Popular tours by number of bookings (and revenue)
-// Chỉ tính các đơn đã hoàn thành (completed)
+// Completed tours aggregated by bookings (only completed bookings)
+// Mặc định: chỉ tính các đơn đã hoàn thành (status = 'completed'), có thể tùy chỉnh qua query params
+// Query hỗ trợ:
+// - statuses: "completed" hoặc danh sách khác nếu muốn override
+// - paidOnly: true|false (mặc định false)
+// - days: số ngày gần đây (ví dụ 90)
 exports.getPopularTours = async (req, res) => {
     try {
         const limit = req.query.limit ? parseInt(req.query.limit, 10) : 6;
 
+        // Parse query
+        const statuses = typeof req.query.statuses === 'string'
+            ? req.query.statuses.split(',').map(s => s.trim()).filter(Boolean)
+            : [];
+        const paidOnly = String(req.query.paidOnly ?? 'false').toLowerCase() === 'true';
+        const days = req.query.days ? parseInt(req.query.days, 10) : undefined;
+
+        const matchStage = { isDeleted: false };
+        if (paidOnly) matchStage.paid = true;
+        // Mặc định chỉ lấy các đơn đã hoàn thành
+        if (statuses.length > 0) {
+            matchStage.status = { $in: statuses };
+        } else {
+            matchStage.status = 'completed';
+        }
+        if (!isNaN(days) && days > 0) {
+            const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+            matchStage.createdAt = { $gte: from };
+        }
+
         const pipeline = [
-            { $match: { status: 'completed' } }, // Chỉ tính đơn đã hoàn thành
+            { $match: matchStage },
             {
                 $group: {
                     _id: '$tour',
                     bookings: { $sum: 1 },
+                    peopleCount: { $sum: '$numberOfPeople' },
                     revenue: { $sum: '$price' }
                 }
             },
@@ -364,15 +491,24 @@ exports.getPopularTours = async (req, res) => {
                     as: 'tour'
                 }
             },
-            { $unwind: '$tour' }
+            { $unwind: '$tour' },
+            // Loại trừ tour đã bị soft delete (deletedAt != null)
+            { $match: { 'tour.deletedAt': null } }
         ];
 
         const popular = await Booking.aggregate(pipeline);
 
-        // Map để trả về đầy đủ thông tin tour
         const tours = popular.map(item => ({
-            ...item.tour,
+            _id: item.tour._id,
+            name: item.tour.name,
+            destination: item.tour.destination,
+            price: item.tour.price,
+            duration: item.tour.duration,
+            maxGroupSize: item.tour.maxGroupSize,
+            images: item.tour.images,
+            averageRating: item.tour.averageRating,
             bookingsCount: item.bookings,
+            peopleCount: item.peopleCount,
             revenue: item.revenue
         }));
 
@@ -382,6 +518,7 @@ exports.getPopularTours = async (req, res) => {
             data: { tours }
         });
     } catch (err) {
+        console.error('Error in getPopularTours:', err);
         res.status(400).json({
             status: 'fail',
             message: err.message

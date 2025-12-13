@@ -629,6 +629,144 @@
   margin-right: 0;
 }
 
+/* Stats Tab */
+.stats-tab {
+  background: white;
+  border-radius: 8px;
+  padding: 2rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.stats-tab h2 {
+  margin-bottom: 1.5rem;
+  color: #333;
+  margin-top: 2rem;
+}
+
+.stats-tab h2:first-child {
+  margin-top: 0;
+}
+
+.stats-tab table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 2rem;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.stats-tab thead {
+  background: #f8f9fa;
+}
+
+.stats-tab th {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: #333;
+  border-bottom: 2px solid #e0e0e0;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stats-tab td {
+  padding: 1rem;
+  border-bottom: 1px solid #f0f0f0;
+  color: #555;
+}
+
+.stats-tab tbody tr {
+  transition: background-color 0.2s ease;
+}
+
+.stats-tab tbody tr:hover {
+  background: #f8f9fa;
+}
+
+.stats-tab tbody tr:last-child td {
+  border-bottom: none;
+}
+
+/* Deleted Tours Management */
+.deleted-tours-management {
+  background: white;
+  border-radius: 8px;
+  padding: 2rem;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.deleted-tours-management h2 {
+  margin-bottom: 1.5rem;
+  color: #333;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.deleted-tours-management table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 1.5rem;
+  background: white;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.deleted-tours-management thead {
+  background: #f8f9fa;
+}
+
+.deleted-tours-management th {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: #333;
+  border-bottom: 2px solid #e0e0e0;
+  font-size: 0.9rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.deleted-tours-management td {
+  padding: 1rem;
+  border-bottom: 1px solid #f0f0f0;
+  color: #555;
+}
+
+.deleted-tours-management tbody tr {
+  transition: background-color 0.2s ease;
+}
+
+.deleted-tours-management tbody tr:hover {
+  background: #fff3e0;
+}
+
+.deleted-tours-management tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.btn-restore {
+  background: #4CAF50;
+  color: white;
+  border: none;
+  padding: 0.6rem 1rem;
+  border-radius: 6px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.btn-restore:hover {
+  background: #45a049;
+  transform: translateY(-2px);
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .admin-tabs {

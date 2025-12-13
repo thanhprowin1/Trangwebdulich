@@ -2,10 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { useHistory } from 'react-router-dom';
 import axios from 'axios';
 import { API_URL } from '../config';
+import BookingDetailModal from '../components/BookingDetailModal';
 
 const MyBookings = () => {
   const [bookings, setBookings] = useState([]);
   const history = useHistory();
+  const [selectedBooking, setSelectedBooking] = useState(null);
+
+  // State cho form mở rộng tour
+  const [extendForm, setExtendForm] = useState({
+    openFor: null, // bookingId đang mở form
+    additionalDays: 0,
+    additionalPeople: 0,
+    loading: false
+  });
 
   useEffect(() => {
     fetchMyBookings();
@@ -61,9 +71,42 @@ const MyBookings = () => {
     return new Date(date).toLocaleDateString('vi-VN');
   };
 
+  const calculateEndDate = (booking) => {
+    const startDate = new Date(booking.startDate);
+
+    // Parse số ngày của tour an toàn (có thể là number hoặc string như "3 ngày")
+    const parseDuration = (val) => {
+      if (typeof val === 'number' && !Number.isNaN(val)) return val;
+      if (typeof val === 'string') {
+        const m = val.match(/[0-9]+/);
+        if (m) return parseInt(m[0], 10);
+      }
+      return 0;
+    };
+
+    // Tính tổng số ngày: thời gian tour + thời gian thêm (nếu có)
+    let totalDays = parseDuration(booking?.tour?.duration);
+    if (booking.extension?.additionalDays > 0 && booking.extension?.extensionStatus === 'approved') {
+      totalDays += booking.extension.additionalDays;
+    }
+
+    if (!totalDays) return startDate; // fallback
+
+    // Cộng thêm (totalDays - 1) vì ngày khởi hành là ngày 1
+    const endDate = new Date(startDate);
+    endDate.setDate(endDate.getDate() + totalDays - 1);
+    return endDate;
+  };
+
   return (
+    <div className="my-bookings-wrapper">
     <div className="container my-bookings">
-      <h2>Đơn đặt tour của tôi</h2>
+      <div className="my-bookings-header">
+        <h2>Đơn đặt tour của tôi</h2>
+        <button onClick={fetchMyBookings} className="btn btn-secondary">
+          🔄 Làm mới
+        </button>
+      </div>
       <div className="bookings-list">
         {bookings.length === 0 ? (
           <div className="no-bookings">
@@ -95,7 +138,15 @@ const MyBookings = () => {
                     </div>
                     <div className="detail">
                       <span>Tổng tiền:</span>
-                      <strong>{booking.price.toLocaleString()} VND</strong>
+                      {(() => {
+                        const ext = booking.extension || {};
+                        const finalPrice = typeof booking.finalPrice === 'number'
+                          ? booking.finalPrice
+                          : (ext.extensionStatus === 'approved'
+                              ? (ext.totalPrice || (booking.price + (ext.extensionPrice || 0)))
+                              : booking.price);
+                        return <strong>{finalPrice.toLocaleString()} VND</strong>;
+                      })()}
                     </div>
                     <div className="detail">
                       <span>Trạng thái thanh toán:</span>
@@ -121,6 +172,7 @@ const MyBookings = () => {
                     {booking.status === 'confirmed' && 'Đã xác nhận'}
                     {booking.status === 'completed' && 'Đã hoàn thành'}
                     {booking.status === 'pending' && 'Đang chờ xác nhận'}
+
                     {booking.status === 'cancelled' && 'Đã hủy'}
                   </span>
                 </div>
@@ -130,13 +182,84 @@ const MyBookings = () => {
                     <strong>{formatDate(booking.startDate)}</strong>
                   </div>
                   <div className="detail">
+                    <span>Ngày kết thúc:</span>
+                    <strong>{formatDate(calculateEndDate(booking))}</strong>
+                  </div>
+                  <div className="detail">
                     <span>Số người:</span>
-                    <strong>{booking.numberOfPeople}</strong>
+                    <strong>
+                      {booking.numberOfPeople}
+                      {booking.extension?.extensionStatus === 'pending' && booking.extension?.additionalPeople > 0 && (
+                        <span style={{ color: 'orange', marginLeft: '5px' }}>(+{booking.extension.additionalPeople})</span>
+                      )}
+                    </strong>
                   </div>
                   <div className="detail">
                     <span>Tổng tiền:</span>
-                    <strong>{booking.price.toLocaleString()} VND</strong>
+                    {(() => {
+                      const ext = booking.extension || {};
+                      const finalPrice = typeof booking.finalPrice === 'number'
+                        ? booking.finalPrice
+                        : (ext.extensionStatus === 'approved'
+                            ? (ext.totalPrice || (booking.price + (ext.extensionPrice || 0)))
+                            : booking.price);
+                      return <strong>{finalPrice.toLocaleString()} VND</strong>;
+                    })()}
                   </div>
+
+                  <div className="detail">
+                    <span>Thời gian:</span>
+                    <strong>
+                      {(() => {
+                        const d = booking?.tour?.duration;
+                        if (typeof d === 'number') return `${d} ngày`;
+                        if (typeof d === 'string' && d.trim()) return d; // ví dụ: "3 ngày"
+                        return '—';
+                      })()}
+                      {booking.extension?.additionalDays > 0 && (
+                        <span
+                          style={{
+                            color:
+                              booking.extension.extensionStatus === 'approved'
+                                ? 'green'
+                                : booking.extension.extensionStatus === 'pending'
+                                ? 'orange'
+                                : '#999',
+                            marginLeft: '5px'
+                          }}
+                        >
+                          (+{booking.extension.additionalDays})
+                        </span>
+                      )}
+                    </strong>
+                  </div>
+                  {booking.extension && booking.extension.extensionStatus !== 'none' && (
+                    <div className="extension-info" style={{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid #eee' }}>
+                      <div className="detail">
+                        <span>Trạng thái mở rộng:</span>
+                        <strong>
+                          {booking.extension.extensionStatus === 'pending' && <span style={{ color: 'orange' }}>Đang chờ duyệt</span>}
+                          {booking.extension.extensionStatus === 'approved' && <span style={{ color: 'green' }}>Đã phê duyệt</span>}
+                          {booking.extension.extensionStatus === 'rejected' && <span style={{ color: 'red' }}>Bị từ chối</span>}
+                        </strong>
+                      </div>
+
+                      {booking.extension.extensionPrice > 0 && (
+                        <div className="detail price-breakdown">
+                          {booking.extension.extensionStatus === 'pending' ? (
+                            <>
+                              <p><span>Phụ thu (chờ duyệt):</span> <span>{booking.extension.extensionPrice.toLocaleString()} VND</span></p>
+                              <p><strong><span>Tổng dự kiến:</span> <span>{booking.extension.totalPrice.toLocaleString()} VND</span></strong></p>
+                            </>
+                          ) : (
+                            <>
+                              <p><span>Phụ thu đã duyệt:</span> <span>{booking.extension.extensionPrice.toLocaleString()} VND</span></p>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
                   <div className="detail">
                     <span>Trạng thái thanh toán:</span>
                     <strong style={{ color: booking.paid ? '#27ae60' : '#e74c3c' }}>
@@ -147,6 +270,15 @@ const MyBookings = () => {
                     <span>Ngày đặt:</span>
                     <strong>{formatDate(booking.createdAt)}</strong>
                   </div>
+                </div>
+                <div className="booking-actions" style={{ marginTop: '8px' }}>
+                  <button
+                    className="btn btn-secondary"
+                    onClick={() => setSelectedBooking(booking)}
+                    style={{ marginRight: '0.5rem' }}
+                  >
+                    👁️ Xem chi tiết
+                  </button>
                 </div>
                 <div className="booking-actions">
                   {!booking.paid && booking.status !== 'cancelled' && (
@@ -172,8 +304,20 @@ const MyBookings = () => {
           })
         )}
       </div>
+
+      {selectedBooking && (
+        <BookingDetailModal
+          booking={selectedBooking}
+          onClose={() => setSelectedBooking(null)}
+        />
+      )}
+
+
+
+    </div>
     </div>
   );
 };
 
 export default MyBookings;
+

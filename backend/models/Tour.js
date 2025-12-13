@@ -116,11 +116,25 @@ const tourSchema = new mongoose.Schema({
                 default: 0
             }
         }]
-    }]
+    }],
+    // Soft delete field
+    deletedAt: {
+        type: Date,
+        default: null
+    }
 });
 
-// Middleware để tính toán averageRating khi lấy tour
+// Middleware để tự động lọc tour đã bị xóa (soft delete) khi query
 tourSchema.pre(/^find/, function(next) {
+    // Lấy filter hiện tại
+    const filter = this.getFilter();
+
+    // Chỉ thêm filter nếu query chưa có điều kiện deletedAt
+    // Kiểm tra xem filter hiện tại có deletedAt không
+    if (!filter.hasOwnProperty('deletedAt')) {
+        this.where({ deletedAt: null });
+    }
+
     this.populate({
         path: 'ratings',
         select: 'rating'
@@ -146,6 +160,19 @@ tourSchema.post(/^find/, async function(docs) {
             }
         }
     }
+});
+
+// Middleware để chặn xóa thực sự (hard delete) - chỉ cho phép soft delete
+// Trừ khi có flag forceDelete = true
+tourSchema.pre(/^remove|^deleteOne|^findByIdAndDelete|^findByIdAndRemove/, function(next) {
+    // Lấy options từ query một cách an toàn theo phiên bản Mongoose
+    const opts = (typeof this.getOptions === 'function') ? this.getOptions() : (this.options || {});
+    if (opts && opts.forceDelete === true) {
+        return next();
+    }
+
+    // Nếu không, throw error để buộc sử dụng soft delete
+    return next(new Error('Không thể xóa tour trực tiếp. Vui lòng sử dụng soft delete API.'));
 });
 
 module.exports = mongoose.model('Tour', tourSchema);

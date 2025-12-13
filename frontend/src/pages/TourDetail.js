@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import { API_URL } from '../config';
@@ -13,6 +13,9 @@ const TourDetail = () => {
   const [booking, setBooking] = useState({
     numberOfPeople: 1,
     startDate: '',
+    // Thêm state cho mở rộng tour
+    additionalDays: 0,
+    additionalPeople: 0,
   });
   const [refreshReviews, setRefreshReviews] = useState(0);
   const [selectedImageIndex, setSelectedImageIndex] = useState(0); // State cho ảnh đang hiển thị
@@ -39,7 +42,7 @@ const TourDetail = () => {
     }
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    
+
     return tour.startDates
       .map(date => new Date(date))
       .filter(date => date >= startOfToday)
@@ -47,14 +50,38 @@ const TourDetail = () => {
       .map(date => ({
         value: formatDateForInput(date),
         dateObj: date,
-        label: date.toLocaleDateString('vi-VN', { 
-          weekday: 'long', 
-          year: 'numeric', 
-          month: 'long', 
-          day: 'numeric' 
+        label: date.toLocaleDateString('vi-VN', {
+          weekday: 'long',
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric'
         })
       }));
   };
+  // Tính tổng tiền (bao gồm mở rộng)
+  const { totalPrice, extensionPrice } = useMemo(() => {
+    if (!tour) return { totalPrice: 0, extensionPrice: 0 };
+
+    const basePrice = tour.price * booking.numberOfPeople;
+
+    const days = booking.additionalDays || 0;
+    const people = booking.additionalPeople || 0;
+
+    if (days === 0 && people === 0) {
+      return { totalPrice: basePrice, extensionPrice: 0 };
+    }
+
+    // Tính toán giá mỗi ngày và mỗi người, tránh chia cho 0
+    const pricePerDay = tour.duration > 0 ? tour.price / tour.duration : 0;
+    const pricePerPerson = tour.maxGroupSize > 0 ? tour.price / tour.maxGroupSize : 0;
+
+    const calculatedExtensionPrice = (pricePerDay * days) + (pricePerPerson * people);
+
+    return {
+      totalPrice: basePrice + calculatedExtensionPrice,
+      extensionPrice: calculatedExtensionPrice
+    };
+  }, [tour, booking.numberOfPeople, booking.additionalDays, booking.additionalPeople]);
 
   const availableDates = getAvailableStartDates();
 
@@ -78,29 +105,31 @@ const TourDetail = () => {
   const handleBookingChange = (e) => {
     const { name, value } = e.target;
 
-    if (name === 'numberOfPeople') {
-      const parsed = Number(value);
-      if (Number.isNaN(parsed)) {
-        setBooking(prev => ({ ...prev, numberOfPeople: 1 }));
+    // Xử lý tất cả các input số
+    if (['numberOfPeople', 'additionalDays', 'additionalPeople'].includes(name)) {
+      const parsed = parseInt(value, 10);
+
+      // Nếu người dùng xóa số, đặt lại giá trị mặc định
+      if (isNaN(parsed)) {
+        const defaultValue = name === 'numberOfPeople' ? 1 : 0;
+        setBooking(prev => ({ ...prev, [name]: defaultValue }));
         return;
       }
 
-      const sanitized = Math.max(
-        1,
-        Math.min(
-          tour?.maxGroupSize ?? parsed,
-          Math.floor(parsed)
-        )
-      );
+      let sanitized = parsed;
+      if (name === 'numberOfPeople') {
+        sanitized = Math.max(1, sanitized); // Phải có ít nhất 1 người
+      } else {
+        sanitized = Math.max(0, sanitized); // Ngày và người thêm có thể là 0
+      }
 
-      setBooking(prev => ({ ...prev, numberOfPeople: sanitized }));
-      return;
+      setBooking(prev => ({ ...prev, [name]: sanitized }));
+    } else {
+      setBooking(prev => ({
+        ...prev,
+        [name]: value
+      }));
     }
-
-    setBooking(prev => ({
-      ...prev,
-      [name]: value
-    }));
   };
 
   const handleBooking = async () => {
@@ -111,55 +140,55 @@ const TourDetail = () => {
         return;
       }
 
-      // Client-side validate: startDate must be selected and valid
+      // 1. Validate inputs
       if (!booking.startDate) {
         alert('Vui lòng chọn ngày khởi hành');
         return;
       }
-      
-      // Kiểm tra ngày được chọn có nằm trong danh sách startDates của tour không
-      const selectedDateStr = booking.startDate;
-      const isValidDate = availableDates.some(dateOption => dateOption.value === selectedDateStr);
-      
+
+      const isValidDate = availableDates.some(d => d.value === booking.startDate);
       if (!isValidDate) {
-        alert('Ngày khởi hành không hợp lệ. Vui lòng chọn từ danh sách ngày có sẵn.');
-        return;
-      }
-      
-      const selected = new Date(booking.startDate);
-      const now = new Date();
-      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      if (selected < startOfToday) {
-        alert('Ngày khởi hành không được ở trong quá khứ');
+        alert('Ngày khởi hành không hợp lệ. Vui lòng chọn từ lịch.');
         return;
       }
 
-      const peopleCount = Number(booking.numberOfPeople);
-      if (!Number.isInteger(peopleCount) || peopleCount < 1) {
-        alert('Số lượng người phải lớn hơn 0');
+      const peopleCount = booking.numberOfPeople;
+      const additionalPeopleCount = booking.additionalPeople || 0;
+      const additionalDaysCount = booking.additionalDays || 0;
+
+      // Chỉ kiểm tra giới hạn số người khi không có bất kỳ yêu cầu mở rộng nào
+      if (additionalDaysCount === 0 && additionalPeopleCount === 0 && peopleCount > tour.maxGroupSize) {
+        alert(`Số người không được vượt quá ${tour.maxGroupSize} người.`);
         return;
       }
 
-      if (peopleCount > tour.maxGroupSize) {
-        alert(`Tour chỉ nhận tối đa ${tour.maxGroupSize} người`);
-        return;
-      }
-
-      await axios.post(`${API_URL}/bookings`, {
+      // 2. Prepare payload
+      const payload = {
         tour: id,
         numberOfPeople: peopleCount,
-        startDate: booking.startDate
-      }, {
+        startDate: booking.startDate,
+        additionalDays: booking.additionalDays || 0,
+        additionalPeople: additionalPeopleCount,
+      };
+
+      // 3. Send request to backend
+      await axios.post(`${API_URL}/bookings`, payload, {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      alert('Đặt tour thành công!');
-      // Refresh tour data để cập nhật bookingsCount
-      fetchTourDetail();
+      const successMessage = booking.additionalDays > 0 || booking.additionalPeople > 0
+        ? 'Đặt tour thành công! Yêu cầu mở rộng của bạn đã được gửi và đang chờ admin phê duyệt.'
+        : 'Đặt tour thành công!';
+
+      alert(successMessage);
+
+      // 4. Redirect to My Bookings page
       window.location.href = '/my-bookings';
+
     } catch (error) {
+      const errorMessage = error.response?.data?.message || 'Có lỗi xảy ra khi đặt tour. Vui lòng thử lại!';
       console.error('Error booking tour:', error);
-      alert('Có lỗi xảy ra khi đặt tour. Vui lòng thử lại!');
+      alert(errorMessage);
     }
   };
 
@@ -416,13 +445,42 @@ const TourDetail = () => {
                 onChange={handleBookingChange}
               />
             </div>
+            <div className="form-group extension-group">
+              <label>Mở rộng tour (tùy chọn):</label>
+              <div className="extension-inputs">
+                <div className="extension-input">
+                  <label htmlFor="additionalDays">Thêm ngày:</label>
+                  <input
+                    type="number"
+                    id="additionalDays"
+                    name="additionalDays"
+                    min="0"
+                    step="1"
+                    value={booking.additionalDays}
+                    onChange={handleBookingChange}
+                  />
+                </div>
+                <div className="extension-input">
+                  <label htmlFor="additionalPeople">Thêm người:</label>
+                  <input
+                    type="number"
+                    id="additionalPeople"
+                    name="additionalPeople"
+                    min="0"
+                    step="1"
+                    value={booking.additionalPeople}
+                    onChange={handleBookingChange}
+                  />
+                </div>
+              </div>
+            </div>
             <div className="form-group">
               <label>Ngày khởi hành:</label>
               {availableDates.length === 0 ? (
-                <div style={{ 
-                  padding: '1rem', 
-                  background: '#fff3cd', 
-                  border: '1px solid #ffc107', 
+                <div style={{
+                  padding: '1rem',
+                  background: '#fff3cd',
+                  border: '1px solid #ffc107',
                   borderRadius: '4px',
                   color: '#856404'
                 }}>
@@ -465,10 +523,19 @@ const TourDetail = () => {
               )}
             </div>
             <div className="total-price">
-              Tổng tiền: {(tour.price * booking.numberOfPeople).toLocaleString()} VND
+              {extensionPrice > 0 && (
+                <div className="price-breakdown">
+                  <p><span>Giá gốc:</span> <span>{(totalPrice - extensionPrice).toLocaleString()} VND</span></p>
+                  <p><span>Phụ thu mở rộng:</span> <span>{Math.round(extensionPrice).toLocaleString()} VND</span></p>
+                </div>
+              )}
+              <div className="final-price">
+                <span>Tổng tiền:</span>
+                <strong>{Math.round(totalPrice).toLocaleString()} VND</strong>
+              </div>
             </div>
-            <button 
-              onClick={handleBooking} 
+            <button
+              onClick={handleBooking}
               className="btn btn-primary book-button"
               disabled={availableDates.length === 0}
             >

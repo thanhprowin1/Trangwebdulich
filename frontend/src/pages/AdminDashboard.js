@@ -3,6 +3,7 @@ import axios from 'axios';
 import { API_URL } from '../config';
 import '../styles/AdminDashboard.css';
 import { getImageUrl } from '../utils/imageHelper';
+import TourExtensionsAdmin from '../components/TourExtensionsAdmin';
 
 const AdminDashboard = () => {
   const [successMessage, setSuccessMessage] = useState('');
@@ -36,7 +37,7 @@ const AdminDashboard = () => {
   const [originalImage360Url, setOriginalImage360Url] = useState(null); // Lưu image360Url ban đầu từ database
   const [editStartDate, setEditStartDate] = useState('');
   const [editImageUrl, setEditImageUrl] = useState('');
-  
+
   // State cho quản lý hotspot
   const [newHotspot, setNewHotspot] = useState({
     name: '',
@@ -62,6 +63,8 @@ const AdminDashboard = () => {
   const [editingUser, setEditingUser] = useState(null);
   const [pendingDeleteImage360, setPendingDeleteImage360] = useState(false);
   const [image360UrlToDelete, setImage360UrlToDelete] = useState(null);
+
+
 
   useEffect(() => {
     if (activeTab === 'tours') {
@@ -127,20 +130,18 @@ const AdminDashboard = () => {
   const fetchPopularTours = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get(`${API_URL}/bookings/stats/popular`, {
+      const response = await axios.get(`${API_URL}/bookings/stats/popular?statuses=completed`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const popularData = response.data?.data;
-      const popular =
-        Array.isArray(popularData?.tours)
-          ? popularData.tours
-          : Array.isArray(popularData?.popular)
-            ? popularData.popular
-            : [];
+      const popular = Array.isArray(popularData?.tours) ? popularData.tours : [];
       setPopularTours(popular);
+      setErrorMessage('');
     } catch (error) {
       console.error('Error fetching popular tours:', error);
+      setErrorMessage(error.response?.data?.message || 'Có lỗi khi tải dữ liệu tour đã hoàn thành!');
       setPopularTours([]);
+      setTimeout(() => setErrorMessage(''), 5000);
     }
   };
 
@@ -155,9 +156,12 @@ const AdminDashboard = () => {
           ? response.data.data.stats
           : [];
       setRevenueStats(stats);
+      setErrorMessage('');
     } catch (error) {
       console.error('Error fetching revenue stats:', error);
+      setErrorMessage(error.response?.data?.message || 'Có lỗi khi tải dữ liệu doanh thu!');
       setRevenueStats([]);
+      setTimeout(() => setErrorMessage(''), 5000);
     }
   };
 
@@ -175,6 +179,8 @@ const AdminDashboard = () => {
     }
   };
 
+
+
   const handleNewTourChange = (e) => {
     setNewTour({
       ...newTour,
@@ -188,13 +194,13 @@ const AdminDashboard = () => {
       const selectedDate = new Date(newStartDate);
       const today = new Date();
       today.setHours(0, 0, 0, 0); // Reset giờ để so sánh chỉ ngày
-      
+
       if (selectedDate < today) {
         setErrorMessage('Không thể chọn ngày khởi hành trong quá khứ!');
         setTimeout(() => setErrorMessage(''), 3000);
         return;
       }
-      
+
       setNewTour({
         ...newTour,
         startDates: [...newTour.startDates, newStartDate]
@@ -230,7 +236,7 @@ const AdminDashboard = () => {
   // Hàm xóa ảnh 360 chỉ từ Cloudinary (cho tour chưa lưu)
   const handleDelete360ImageOnly = async (image360Url) => {
     if (!image360Url) return;
-    
+
     if (!window.confirm('Bạn có chắc chắn muốn xóa ảnh 360° này? Ảnh sẽ bị xóa vĩnh viễn từ Cloudinary.')) {
       return;
     }
@@ -598,13 +604,13 @@ const AdminDashboard = () => {
       const selectedDate = new Date(editStartDate);
       const today = new Date();
       today.setHours(0, 0, 0, 0); // Reset giờ để so sánh chỉ ngày
-      
+
       if (selectedDate < today) {
         setErrorMessage('Không thể chọn ngày khởi hành trong quá khứ!');
         setTimeout(() => setErrorMessage(''), 3000);
         return;
       }
-      
+
       setEditingTour({
         ...editingTour,
         startDates: [...editingTour.startDates, editStartDate]
@@ -641,7 +647,7 @@ const AdminDashboard = () => {
   };
 
   // ============ HOTSPOT MANAGEMENT FUNCTIONS ============
-  
+
   const handleAddHotspot = async () => {
     if (!newHotspot.name || !newHotspot.lat || !newHotspot.lng) {
       setErrorMessage('Vui lòng nhập đầy đủ tên và tọa độ (lat, lng) cho hotspot!');
@@ -808,6 +814,7 @@ const AdminDashboard = () => {
           // Nếu pitch = 0 hoặc không hợp lệ, dùng -25 để nghiêng xuống mặt đất
           return Number.isFinite(pitchValue) && pitchValue !== 0 ? pitchValue : -25;
         })(),
+        targetYaw: Number.isFinite(parseFloat(link.targetYaw)) ? parseFloat(link.targetYaw) : 0,
         text: link.text || ''
       }))
     };
@@ -930,14 +937,14 @@ const AdminDashboard = () => {
     try {
       const token = localStorage.getItem('token');
       const tourId = editingTour._id;
-      
+
       // Debug: Log dữ liệu trước khi gửi
       console.log('Updating tour with data:', {
         mapCenter: editingTour.mapCenter,
         hotspots: editingTour.hotspots,
         hotspotsCount: editingTour.hotspots?.length || 0
       });
-      
+
       await axios.patch(`${API_URL}/tours/${tourId}`, editingTour, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -957,11 +964,40 @@ const AdminDashboard = () => {
       fetchTours();
       // Cập nhật originalImage360Url sau khi lưu thành công
       setOriginalImage360Url(editingTour.image360Url || null);
+      // Reset toàn bộ form về trạng thái tạo tour mới để tránh giữ thông tin hotspot vừa chỉnh sửa
       setEditingTour(null);
       setEditStartDate('');
       setEditImageUrl('');
       setPendingDeleteImage360(false);
       setImage360UrlToDelete(null);
+      setNewTour({
+        name: '',
+        description: '',
+        price: '',
+        duration: '',
+        maxGroupSize: '',
+        destination: '',
+        startDates: [],
+        images: [],
+        image360Url: null,
+        video360Url: '',
+        mapCenter: { lat: null, lng: null },
+        mapZoom: 13,
+        hotspots: []
+      });
+      setNewHotspot({
+        name: '',
+        lat: '',
+        lng: '',
+        image360Url: '',
+        image360Urls: [],
+        video360Url: '',
+        description: '',
+        links: []
+      });
+      setHotspot360Files([]);
+      setHotspot360Previews([]);
+      setEditingHotspotIndex(null);
       setTimeout(() => {
         setSuccessMessage('');
       }, 3000);
@@ -1059,6 +1095,12 @@ const AdminDashboard = () => {
           onClick={() => setActiveTab('bookings')}
         >
           Quản lý Đơn đặt
+        </button>
+        <button
+          className={activeTab === 'extensions' ? 'active' : ''}
+          onClick={() => setActiveTab('extensions')}
+        >
+          Quản lý Mở rộng
         </button>
         <button
           className={activeTab === 'users' ? 'active' : ''}
@@ -1199,7 +1241,7 @@ const AdminDashboard = () => {
               {/* Bản đồ và Hotspot */}
               <div className="form-group full-width">
                 <label>🗺️ Bản đồ và Hotspot (Điểm đánh dấu trên bản đồ)</label>
-                
+
                 {/* Map Center */}
                 <div style={{ marginBottom: '1rem', padding: '1rem', background: '#f5f5f5', borderRadius: '6px' }}>
                   <h4 style={{ marginBottom: '0.5rem', fontSize: '1rem' }}>Tọa độ trung tâm bản đồ</h4>
@@ -1279,7 +1321,7 @@ const AdminDashboard = () => {
                 {/* Hotspots */}
                 <div style={{ marginTop: '1rem' }}>
                   <h4 style={{ marginBottom: '0.5rem', fontSize: '1rem' }}>Danh sách Hotspot</h4>
-                  
+
                   {/* Form thêm/sửa hotspot */}
                   <div style={{ padding: '1rem', background: '#fff', border: '1px solid #ddd', borderRadius: '6px', marginBottom: '1rem' }}>
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
@@ -1376,7 +1418,7 @@ const AdminDashboard = () => {
                                       fontWeight: 600
                                     }}
                                   >
-                                    #{idx + 1}
+                                    #{idx}
                                   </div>
                                   <button
                                     type="button"
@@ -1659,14 +1701,14 @@ const AdminDashboard = () => {
                     </div>
                   </div>
 
-                  {/* Danh sách hotspots */}
+                  {/* Danh sách wwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwwhotspots */}
                   {(editingTour ? editingTour.hotspots : newTour.hotspots).length > 0 && (
                     <div style={{ marginTop: '1rem' }}>
                       {(editingTour ? editingTour.hotspots : newTour.hotspots).map((hotspot, index) => (
-                        <div key={index} style={{ 
-                          padding: '0.75rem', 
-                          background: '#f9f9f9', 
-                          border: '1px solid #ddd', 
+                        <div key={index} style={{
+                          padding: '0.75rem',
+                          background: '#f9f9f9',
+                          border: '1px solid #ddd',
                           borderRadius: '6px',
                           marginBottom: '0.5rem',
                           display: 'flex',
@@ -1674,7 +1716,24 @@ const AdminDashboard = () => {
                           alignItems: 'center'
                         }}>
                           <div style={{ flex: 1 }}>
-                            <strong>📍 {hotspot.name}</strong>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                              <span style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                width: '32px',
+                                height: '28px',
+                                borderRadius: '6px',
+                                background: '#e3f2fd',
+                                border: '1px solid #90caf9',
+                                color: '#0d47a1',
+                                fontWeight: 700,
+                                fontSize: '0.9rem'
+                              }}>
+                                #{index}
+                              </span>
+                              <strong>📍 {hotspot.name}</strong>
+                            </div>
                             {hotspot.description && <p style={{ margin: '0.25rem 0', fontSize: '0.85rem', color: '#666' }}>{hotspot.description}</p>}
                             <p style={{ margin: '0.25rem 0', fontSize: '0.8rem', color: '#888' }}>
                               Tọa độ: {hotspot.lat}, {hotspot.lng}
@@ -1708,7 +1767,7 @@ const AdminDashboard = () => {
                       ))}
                     </div>
                   )}
-                  
+
                   <p className="upload-hint" style={{ marginTop: '0.5rem' }}>
                     💡 Hotspot là các điểm đánh dấu trên bản đồ. Khi người dùng click vào hotspot, họ sẽ xem được ảnh/video 360° của điểm đó.
                     <br />Nếu hotspot không có ảnh/video 360° riêng, sẽ dùng ảnh/video 360° của tour.
@@ -2009,9 +2068,21 @@ const AdminDashboard = () => {
             </tbody>
           </table>
         </div>
+      ) : activeTab === 'extensions' ? (
+        <TourExtensionsAdmin />
       ) : (
         <div className="stats-tab">
-          <h2>Tour phổ biến</h2>
+          <h2>Tour đã hoàn thành</h2>
+          {successMessage && (
+            <div className="success-message">
+              <span>{successMessage}</span>
+            </div>
+          )}
+          {errorMessage && (
+            <div className="error-message">
+              <span>{errorMessage}</span>
+            </div>
+          )}
           <table>
             <thead>
               <tr>
@@ -2025,7 +2096,12 @@ const AdminDashboard = () => {
               {popularTours.length === 0 ? (
                 <tr>
                   <td colSpan="4" style={{ textAlign: 'center', padding: '1.5rem' }}>
-                    Chưa có dữ liệu tour phổ biến
+                    <div style={{ color: '#666' }}>
+                      <p>Chưa có dữ liệu tour đã hoàn thành</p>
+                      <p style={{ fontSize: '0.9rem', marginTop: '0.5rem' }}>
+                        💡 Thống kê chỉ hiển thị các đơn đặt có trạng thái <strong>"Hoàn thành"</strong>
+                      </p>
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -2052,14 +2128,27 @@ const AdminDashboard = () => {
               </tr>
             </thead>
             <tbody>
-              {revenueStats.map((s, idx) => (
-                <tr key={idx}>
-                  <td>{s.year}</td>
-                  <td>{s.month}</td>
-                  <td>{s.totalBookings}</td>
-                  <td>{s.totalRevenue.toLocaleString()} VND</td>
+              {revenueStats.length === 0 ? (
+                <tr>
+                  <td colSpan="4" style={{ textAlign: 'center', padding: '1.5rem' }}>
+                    <div style={{ color: '#666' }}>
+                      <p>Chưa có dữ liệu doanh thu</p>
+                      <p style={{ fontSize: '0.9rem', marginTop: '0.5rem' }}>
+                        💡 Thống kê chỉ hiển thị các đơn đặt có trạng thái <strong>"Hoàn thành"</strong>
+                      </p>
+                    </div>
+                  </td>
                 </tr>
-              ))}
+              ) : (
+                revenueStats.map((s, idx) => (
+                  <tr key={idx}>
+                    <td>{s.year}</td>
+                    <td>{s.month}</td>
+                    <td>{s.totalBookings}</td>
+                    <td>{s.totalRevenue.toLocaleString()} VND</td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
